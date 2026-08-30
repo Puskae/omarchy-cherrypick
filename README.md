@@ -1,0 +1,691 @@
+# omarchy-cherrypick
+
+Cherry-pick [Omarchy](https://omarchy.org) 4.0's Hyprland configs and themes onto an
+existing **CachyOS** install — **without installing the Omarchy runtime**, on **AMD**
+hardware.
+
+**This is not the full Omarchy experience, and isn't trying to be.** Omarchy is a
+whole opinionated system: its installer, the `omarchy-*` menus and helpers, its
+update path, its defaults across dozens of apps. Almost none of that is here, and
+none of it is reimplemented. **If you want Omarchy, [install the real
+thing](https://omarchy.org)** — it's the better answer, and this is no substitute
+for it.
+
+What this *is*: a quick way to try Omarchy's Hyprland configuration and its themes
+on CachyOS without committing to anything, and **without disturbing the Wayland
+session you already have.**
+
+Nothing here replaces your distro. CachyOS keeps its kernel, its repos, its defaults,
+and its Plasma session. Hyprland becomes a second session you can log into, and log
+back out of when it breaks.
+
+**If you are not comfortable learning hotkeys, don't bother with Hyprland.** This
+is not a preference or a difficulty badge — it is how the thing is operated. There
+is no menu, no taskbar to click a window back out of, no drag-to-arrange. Launching
+an app, closing one, moving between workspaces, resizing a tile: each is a key
+combination and nothing else, and there are over a hundred of them in this config
+alone. `SUPER + K` prints the full list, and the first week is spent with it open.
+If that sounds like the appeal, you will get on well here. If it sounds like a
+chore you would rather not have, Plasma is genuinely the better desktop for you and
+staying on it costs you nothing.
+
+> [!WARNING]
+> **If you already have a working Hyprland, back it up before you copy anything.**
+> These files are a complete config set, not an overlay: they replace
+> `hyprland.lua` and every module beside it, and the keybindings, window rules,
+> gaps, animations and autostart list are all Omarchy's rather than yours. Dropping
+> them onto an existing setup does not merge with it, it overrides it — and the
+> Finnish keysyms and `DP-3` monitor block below mean the result may not even be
+> usable until you edit it. `cp -r ~/.config/hypr ~/.config/hypr.bak` first; the
+> [step 3](#3-configs) snippet does exactly that, but do it now if you are only
+> skimming.
+>
+> **Once you're in Hyprland, configure it from the `.lua` files — not from a settings
+> GUI.** Plasma's System Settings writes to Plasma's own config (`kwinrc`,
+> `kdeglobals`, kscreen's saved monitor layouts), and Hyprland reads none of it. Change
+> your monitor arrangement, keyboard layout, input behaviour or window appearance there
+> and it will look like it worked, apply to your Plasma session only, and do nothing in
+> Hyprland — or leave the two sessions disagreeing about your displays. The same goes
+> for any other desktop's control panel, and for appearance: themes come from
+> `omarchy-theme <name>`, not from Plasma's Appearance page.
+>
+> In the Hyprland session, `~/.config/hypr/*.lua` is the only source of truth. Edit it,
+> then `hyprctl reload`.
+
+> **Not affiliated with, endorsed by, or a distribution of Omarchy.**
+> Omarchy is a pending trademark of the Omacom Foundation. This repo cherry-picks
+> Omarchy's MIT-licensed configuration (Copyright © David Heinemeier Hansson) and is
+> an independent set of adaptations and notes.
+
+**[→ See what the themes look like](https://omarchy.org/manual/themes/)** — Omarchy's own
+gallery. No theme files, wallpapers or screenshots of them are stored here;
+[step 2](#2-omarchys-themes-and-templates) installs them from Omarchy, and
+`bin/omarchy-theme` then writes one theme's colors into your app configs.
+
+---
+
+## Why this exists
+
+The existing option, [mroboff/omarchy-on-cachyos](https://github.com/mroboff/omarchy-on-cachyos),
+patches and runs Omarchy's real installer. It's the right tool if you want all of
+Omarchy. But it targets **Omarchy 3.0+**, predates the **4.0 Lua migration**, and its
+one hardware special-case is pinning an **NVIDIA** driver.
+
+This repo takes the opposite approach:
+
+|                  | omarchy-on-cachyos      | omarchy-cherrypick            |
+|------------------|-------------------------|-------------------------------|
+| Omarchy version  | 3.0+                    | **4.0 (Lua)**                 |
+| Runtime          | full install            | **none**                      |
+| Config format    | `.conf` (hyprlang)      | **`.lua`**                    |
+| GPU notes        | NVIDIA 580xx pin        | **AMD / amdgpu**              |
+| Approach         | run the installer       | copy configs, keep your distro |
+
+The tradeoff, restated: **you give up every `omarchy-*` CLI helper.** What you get
+is a system where nothing was installed behind your back, and one Python script
+replaces the single runtime feature actually worth keeping — theming.
+
+## Does this actually need CachyOS?
+
+Barely. Nothing in the configs calls a CachyOS tool — no `chwd`, no CachyOS kernel
+feature, no `cachyos-*` package. What the install genuinely assumes is:
+
+- **An Arch-family system with AUR access**, because the steps below are `pacman`
+  and `paru`, and walker/elephant ship only in the AUR. **EndeavourOS**, Arch and
+  Garuda qualify as they are. Manjaro does too, with the usual caveat that its
+  held-back repos can lag what an AUR build expects.
+- **Arch's packaging layout**, for exactly two absolute paths: hyprpolkitagent at
+  `/usr/lib/hyprpolkitagent/hyprpolkitagent` in the autostart block, and elephant's
+  providers in `/etc/xdg/elephant/providers/`. Both move on Fedora, openSUSE and
+  Debian.
+- **An existing desktop session to fall back into.** Mine is CachyOS's Plasma;
+  anything works, as long as logging out of Hyprland lands you somewhere usable.
+
+The parts that genuinely don't port are hardware, not distro: the AMD gamemode
+hook, the QD-OLED VRR note, the `DP-3` monitor block and the Finnish keysyms. Those
+need editing whatever you run.
+
+So on **EndeavourOS** this should work unchanged, beyond the monitor and keyboard
+edits you'd be making anyway. It says CachyOS because that's where it was built and
+tested — not because it's coupled to it.
+
+## What's here
+
+```
+bin/omarchy-theme        theme switcher; renders Omarchy's templates with no runtime
+bin/llm-vram-release     frees GPU VRAM from Ollama before a game starts
+bin/hypr-cheatsheet      keybinding cheatsheet in a terminal
+bin/hypr-record          screen-recording toggle
+hypr/                    the Lua config set (hyprland.lua + 3 modules),
+                         plus hypridle.conf and hyprlock.conf
+config/waybar/           bar config + stylesheet + a fallback colors.css
+config/gamemode.ini      gamemode hooks
+config/MangoHud.conf     hidden-by-default overlay (hyprland.lua sets MANGOHUD=1)
+```
+
+Not shipped, because `omarchy-theme` generates them per theme: `hypr/theme.lua`
+and `hypr/hyprpaper.conf`.
+
+`waybar/colors.css` *is* shipped even though it is generated, because
+`style.css` `@import`s it and GTK throws away the whole stylesheet when an
+`@import` cannot be resolved. The committed copy is a neutral grey placeholder
+so that logging in before you have picked a theme gives you a styled bar rather
+than an unstyled one and no clue why. The first `omarchy-theme <name>`
+overwrites it.
+
+`hypr-cheatsheet` decodes Hyprland's modmask bitfield with awk's `and()`, which is a
+**gawk** extension. Nothing to install on an Arch-family system — gawk is a dependency
+of both `base` and `pacman`, so it is always there — but the script prints nothing
+useful under mawk or busybox awk if you take it somewhere else.
+
+## Install
+
+Assumes a working CachyOS install. Everything below is additive — your Plasma
+session stays exactly as it is, and stays your way back in when Hyprland breaks.
+
+### 1. Packages
+
+From the repos:
+
+```sh
+sudo pacman -S --needed \
+  hyprland hyprpaper hypridle hyprlock hyprpicker hyprpolkitagent \
+  xdg-desktop-portal-hyprland qt6-wayland \
+  waybar mako alacritty ttf-meslo-nerd \
+  grim slurp wl-clipboard playerctl pavucontrol \
+  wlogout wf-recorder libnotify xdg-user-dirs
+```
+
+`libnotify` and `xdg-user-dirs` are usually already pulled in by Plasma; they're
+listed because `bin/` uses `notify-send` and `xdg-user-dir` directly.
+`ttf-meslo-nerd` supplies **MesloLGM Nerd Font**, which `hyprlock.conf` and the
+waybar stylesheet both name — without it the lock screen clock and the bar's
+glyphs fall back to whatever fontconfig picks, silently and badly.
+
+Nothing here needs a cursor theme package: `hyprland.lua` sets
+`XCURSOR_THEME=Adwaita`, and `adwaita-cursors` comes in with
+`adwaita-icon-theme` → `gtk3` → `waybar`. Naming a theme matters — with only
+`XCURSOR_SIZE` set, Hyprland has nothing to load and you get the tiny built-in
+pointer, which looks like a broken session rather than a missing setting.
+Point it at any theme under `/usr/share/icons` that has a `cursors/`
+subdirectory.
+
+From the AUR — **the launcher and every one of its providers**:
+
+```sh
+paru -S --needed \
+  walker-bin elephant-bin \
+  elephant-desktopapplications-bin elephant-runner-bin elephant-files-bin \
+  elephant-menus-bin elephant-calc-bin elephant-clipboard-bin \
+  elephant-symbols-bin elephant-websearch-bin elephant-providerlist-bin
+```
+
+**Don't trim the elephant list.** Each provider is a separate package dropping a
+`.so` into `/etc/xdg/elephant/providers/`, and walker has no built-in fallback:
+install the daemon without providers and you get a launcher that opens and finds
+nothing. See [gotcha 4](#4-walkers-launcher-failure-looks-like-a-dead-keyboard).
+
+Optional, if you want the gaming hooks or the apps the configs assume:
+
+```sh
+sudo pacman -S --needed gamemode gamescope mangohud   # gaming
+sudo pacman -S --needed btop neovim                   # apps
+```
+
+CachyOS already ships `wireplumber` (for `wpctl`), `networkmanager` (for `nmtui`,
+which `SUPER + CTRL + W` and the bar's network module both open), `firefox` and —
+with Plasma — `dolphin`. The configs reference all four, so they are not in the
+list above; on a leaner Arch install that uses `iwd` or `systemd-networkd`
+instead, either `pacman -S networkmanager` or point that bind and the module's
+`on-click` somewhere else. The terminal, browser and file manager are declared at
+the top of `hypr/omarchy-bindings.lua` — swap them there if you prefer others.
+
+### 2. Omarchy's themes and templates
+
+This repo ships the configs, **not** Omarchy's theme files — those are Omarchy's
+to distribute. Grab them from the source:
+
+```sh
+git clone --depth 1 --branch v4.0.1 https://github.com/omacom/omarchy /tmp/omarchy
+mkdir -p ~/.local/share/omarchy/default
+cp -r /tmp/omarchy/themes          ~/.local/share/omarchy/themes
+cp -r /tmp/omarchy/default/themed  ~/.local/share/omarchy/default/themed
+rm -rf /tmp/omarchy
+```
+
+Both destinations are spelled out in full on purpose: `cp -r src dst/` *renames*
+`src` to `dst` when `dst` does not exist yet, so the shorter form would drop the
+templates at `default/*.tpl` instead of `default/themed/*.tpl`, and
+`omarchy-theme` would then refuse to run. The clone is ~150 MB, almost all of it
+the wallpapers.
+
+**The `--branch v4.0.1` is not decoration.** Omarchy's default branch is
+`quattro`, a development branch — clone it without a tag and you get whatever
+was pushed that morning, which will eventually be Omarchy 5 rather than the 4.0
+these configs were cherry-picked from. Nothing warns you: the palettes and
+templates still render, just against a layout this repo has not been checked
+against. Bump the tag deliberately, or not at all.
+
+That is the entire dependency on upstream: a palette per theme, the wallpapers
+each theme ships, and the `*.tpl` templates rendered against them. All 22 themes
+come with that one clone — browse them at
+[omarchy.org/manual/themes](https://omarchy.org/manual/themes/), then list what
+landed locally with `omarchy-theme`.
+
+### 3. Configs
+
+> [!CAUTION]
+> **These copies overwrite files by name.** If you already have a Hyprland,
+> waybar, gamemode or MangoHud config, the matching file is replaced and the old
+> one is gone. Back up first — the first command below does exactly that, and
+> costs nothing if there was nothing to save.
+
+> [!NOTE]
+> **CachyOS's default shell is fish, and two snippets below are bash.** The backup
+> loop here and the Alacritty heredoc further down both use syntax fish does not
+> have (`for ... do ... done`, `<<'EOF'`), and fish reports them as a parse error
+> rather than doing half the job. Both are wrapped in `bash -c` so they work in
+> either shell — leave the wrapper in place if you are on fish, and it costs
+> nothing if you are not. Everything else on this page is portable.
+
+```sh
+git clone https://github.com/Puskae/omarchy-cherrypick
+cd omarchy-cherrypick
+
+# Back up anything already there. Skips silently if these don't exist.
+bash -c 'for d in hypr waybar MangoHud; do
+  [ -e ~/.config/$d ] && cp -r ~/.config/$d ~/.config/$d.bak-$(date +%Y%m%d)
+done
+[ -e ~/.config/gamemode.ini ] && cp ~/.config/gamemode.ini ~/.config/gamemode.ini.bak'
+
+# The directories may not exist yet -- Hyprland has never run here.
+mkdir -p ~/.config/hypr ~/.config/waybar ~/.config/MangoHud ~/.local/bin
+
+cp hypr/*              ~/.config/hypr/
+cp config/waybar/*     ~/.config/waybar/
+cp config/MangoHud.conf ~/.config/MangoHud/
+cp config/gamemode.ini ~/.config/
+cp bin/*               ~/.local/bin/
+
+# gamemode expands neither ~ nor $HOME in a hook, so the path must be absolute.
+# The shipped file says /home/yourusername; this puts your own path in.
+sed -i "s|/home/yourusername|$HOME|" ~/.config/gamemode.ini
+
+# git preserves the exec bit, so this is only needed if you copied by hand.
+chmod +x ~/.local/bin/omarchy-theme ~/.local/bin/llm-vram-release \
+         ~/.local/bin/hypr-cheatsheet ~/.local/bin/hypr-record
+
+omarchy-theme                 # list themes
+omarchy-theme nord            # apply one
+```
+
+**Alacritty needs one line to actually use the theme.** `omarchy-theme` writes
+`~/.config/alacritty/omarchy-theme.toml`, but it will not touch
+`alacritty.toml` — that file is yours. Nothing imports the generated colors
+until you say so, so add:
+
+```sh
+mkdir -p ~/.config/alacritty
+bash -c 'cat >> ~/.config/alacritty/alacritty.toml <<"EOF"
+
+[general]
+import = ["~/.config/alacritty/omarchy-theme.toml"]
+live_config_reload = true
+EOF'
+```
+
+(If you already have a `[general]` table, put the two keys in it instead of
+appending a second one — TOML rejects a duplicate table.) `omarchy-theme`
+prints this reminder whenever the import line is missing.
+
+`~/.local/bin` has to be on your `PATH` for `omarchy-theme` to be callable by
+name; on CachyOS's default fish and on Arch's bash it already is.
+
+**`MangoHud.conf` is not optional here.** `hyprland.lua` sets `MANGOHUD=1`
+globally, which is only pleasant because that config sets `no_display` — the
+overlay stays hidden until `Shift_R + F12`. Without the file you get an FPS
+counter stapled to every OpenGL and Vulkan app you own, Firefox included. If you
+don't want any of that, delete the `hl.env("MANGOHUD", "1")` line instead.
+
+**Edit `hypr/hyprland.lua` before using it.** `input.kb_layout` is `fi`, which is
+the one edit you cannot skip. The monitor block hardcodes a 3440x1440@164.90
+ultrawide on `DP-3`, but that one is safe to leave: a catch-all `hl.monitor` with
+`output = ""` sits above it, so an unknown display still comes up at its preferred
+mode and only your own monitor's name and refresh rate are worth filling in.
+
+**On a non-Finnish layout, three binds are dead until you rename them.** The
+resize and scratchpad binds in `hypr/omarchy-bindings.lua` name Finnish keysyms,
+and a keysym your layout does not produce registers fine and never fires — see
+[gotcha 2](#2-hlbind-has-no-keycode-support--and-fails-silently). They are the
+same physical keys either way, so on a US layout substitute:
+
+| In the config | US layout | Physical key | Used by |
+|---|---|---|---|
+| `plus`       | `minus` | `-` | resize: shrink |
+| `dead_acute` | `equal` | `=` | resize: grow |
+| `section`    | `grave` | `` ` `` | scratchpad toggle |
+
+```sh
+sed -i 's/\.\. "plus"/.. "minus"/g; s/\.\. "dead_acute"/.. "equal"/g; s/SUPER + section/SUPER + grave/' \
+  ~/.config/hypr/omarchy-bindings.lua
+```
+
+For any other layout, run
+`wev` (or `xkbcli interactive-wayland`) and press the key to see the keysym it
+actually emits.
+
+**And `config/gamemode.ini`** ships a placeholder path,
+`/home/yourusername/.local/bin/llm-vram-release`: gamemode expands neither `~` nor
+`$HOME` in a hook, so that path has to be absolute. The `sed` line above rewrites
+it; if you copied the file by hand instead, put your own username in it, or the
+hook silently never runs.
+
+### 4. Log in
+
+Log out, and pick **Hyprland** at your display manager. If it drops you straight
+back to the login screen, pick Plasma again and read the log:
+
+```sh
+cat "$XDG_RUNTIME_DIR"/hypr/*/hyprland.log
+```
+
+A Lua syntax error takes the whole config down, and names the file and line that
+broke. (The log lives under `$XDG_RUNTIME_DIR`, so it is wiped on logout — read it
+from the Plasma session you fell back into, in the same boot.)
+
+---
+
+## The six things that cost me a day
+
+This is the part worth reading. Every one of these presents as a different problem
+than it is.
+
+### 1. Omarchy 4.0 is Lua. Almost every guide online is not.
+
+Omarchy 4.0 converted its Hyprland configs from hyprlang (`*.conf`) to Hyprland's
+Lua format for 0.56 compatibility, and expanded theme colors from 8 to 24 so
+btop/nvim/vscode themes can be autogenerated.
+
+Practically: **most Hyprland documentation, blog posts and StackExchange answers show
+`.conf` syntax that will not work.** You want `hl.config{}`, `hl.bind{}`,
+`hl.monitor{}`, `hl.env()`, `hl.exec_cmd()`, `hl.on("hyprland.start", ...)`.
+
+Because it's Lua, it's a real program — modules load with `dofile` and an absolute
+path, which avoids depending on `package.path`.
+
+### 2. `hl.bind` has no keycode support — and fails silently
+
+Omarchy binds workspace and resize keys **by keycode** (`code:20`, etc.). In this
+setup that form is **accepted and never fires.** No error, no warning, no log line.
+The bind simply does nothing.
+
+Use keysyms for your layout instead. Expect to lose an hour to this if you don't
+know it, because a silently-dead bind looks like a broken keyboard, not a config bug.
+
+### 3. Not using uwsm breaks every systemd user unit
+
+The session runs plain `start-hyprland`, **not** uwsm. Consequence: nothing ever
+activates `graphical-session.target`, so **every user unit that is `WantedBy=` it
+never starts.** hyprpaper even `Requires=` it.
+
+That's why the autostart block launches daemons **directly**:
+
+```lua
+hl.on("hyprland.start", function()
+  hl.exec_cmd("systemctl --user import-environment $(env | cut -d'=' -f 1)")
+  hl.exec_cmd("dbus-update-activation-environment --systemd --all")
+  hl.exec_cmd("/usr/lib/hyprpolkitagent/hyprpolkitagent")
+  hl.exec_cmd("hyprpaper")
+  hl.exec_cmd("mako")
+  hl.exec_cmd("waybar")
+  hl.exec_cmd("hypridle")
+  ...
+end)
+```
+
+Don't "fix" this by converting them to `systemctl --user start` unless you move the
+session to uwsm. The symptom of getting it wrong is subtle: things work, but only
+sometimes, depending on what else happened to activate the target.
+
+### 4. Walker's launcher failure looks like a dead keyboard
+
+[Walker](https://github.com/abenz1267/walker) needs the **elephant** daemon. Two traps:
+
+- **elephant ships no systemd unit.** Omarchy writes one during an install that never
+  ran here. So nothing starts it.
+- **Providers are separate packages**, dropping `.so` files into
+  `/etc/xdg/elephant/providers/`: `elephant-desktopapplications-bin`, `-calc-`,
+  `-clipboard-`, `-files-`, `-menus-`, `-runner-`, `-symbols-`, `-websearch-`,
+  `-providerlist-`.
+
+Without the daemon, walker maps its overlay and waits on *"waiting for elephant"*
+forever **while holding keyboard focus.** You don't see a launcher error. You see a
+desktop that stopped responding to the keyboard. I spent a long time debugging the
+wrong subsystem.
+
+An **empty walker with no results means no providers are installed** — not a broken
+walker.
+
+Both start from the autostart block:
+
+```lua
+hl.exec_cmd("elephant")
+hl.exec_cmd("walker --gapplication-service")
+```
+
+### 5. hyprpaper 0.8 changed its config format, and fails silently
+
+This one cost the most, because **there is no error message anywhere.**
+
+hyprpaper 0.8 replaced the flat config keys with a section block. The old syntax
+— the one in every guide and in Omarchy's own generated config — still parses
+without complaint and then quietly creates no wallpaper:
+
+```ini
+# Silently does nothing on 0.8.x
+preload   = /path/to/image.jpg
+wallpaper = ,/path/to/image.jpg
+```
+
+```ini
+# Correct
+wallpaper {
+    monitor =
+    path = /path/to/image.jpg
+}
+splash = false
+ipc = on
+```
+
+The only hint is in hyprpaper's own stdout, which you never see because it's
+started in the background:
+
+```console
+$ hyprpaper
+Monitor DP-3 has no target: no wp will be created
+```
+
+`hyprctl hyprpaper listactive` returning **empty** while hyprpaper is running is
+the fast way to confirm it.
+
+The IPC verbs changed in the same release: **`preload`, `listloaded` and `unload`
+are gone.** Only `wallpaper` and `listactive` remain, and `wallpaper` auto-loads:
+
+```sh
+hyprctl hyprpaper wallpaper ",/path/to/image.jpg"   # leading , = all monitors
+```
+
+Requires `ipc = on`. No restart needed.
+
+Note the trap this combination sets: setting a wallpaper over IPC works fine, so
+the desktop looks correct — right up until you reboot and the config, which never
+worked, is all that's left.
+
+**For a plain black background, don't use a black image.** Drop hyprpaper entirely
+and set `misc.background_color` in `hyprland.lua` — Hyprland's default is
+`0xff111111`, which is near-black but not black.
+
+### 6. Every `hyprctl dispatch` in an *external* config is a Lua syntax error
+
+Gotcha 1 says Omarchy 4.0's configs are Lua. The part that bites later is that
+**`hyprctl dispatch` parses its argument as Lua too** — so every other program's
+config file that shells out to `hyprctl` is holding a pre-Lua string that Hyprland
+0.56 now rejects:
+
+```console
+$ hyprctl dispatch dpms off
+error: [string "return hl.dispatch(dpms off)"]:1: ')' expected near 'off'
+
+$ hyprctl dispatch 'hl.dsp.dpms({ mode = "off" })'
+ok
+```
+
+These live outside the `.lua` files, so converting the Hyprland config doesn't
+touch them. In this repo it was `hypridle.conf` (three lines) and waybar's power
+button. **The symptom is that the screen never sleeps** — hypridle checks no exit
+code and prints nothing, so a dead `on-timeout` is indistinguishable from an idle
+timer that simply isn't firing. I went looking at power management first.
+
+Grep your whole config tree for `hyprctl dispatch` after migrating, not just
+`~/.config/hypr`.
+
+Two things make this worse than it needs to be:
+
+- **`hyprctl dispatch` validates nothing.** A dispatcher that takes a table
+  accepts a wrong key silently — `hl.dsp.dpms({ state = "off" })` returns `ok`
+  and does nothing. Confirm the effect, not the exit code:
+  `hyprctl monitors -j | grep dpmsStatus`.
+- **`misc:key_press_enables_dpms` and `misc:mouse_move_enables_dpms` both default
+  to `false`.** Once DPMS does start working, hypridle's `on-resume` becomes the
+  only thing that can wake the display — so a second mistake leaves you pressing
+  keys at a black monitor with a machine that is fine. Omarchy sets both `true`;
+  `hyprland.lua` here does too.
+
+## Theming without the runtime
+
+`bin/omarchy-theme` is the piece with no equivalent elsewhere. Every other Omarchy
+theme tool calls `omarchy-theme-set`, which requires the runtime.
+
+An Omarchy theme is just `themes/<name>/colors.toml` — about 25 flat hex values.
+`default/themed/*.tpl` are templates with `{{ variable }}` slots. Applying a theme
+means rendering templates against one palette. That's the whole mechanism, and the
+core of it is about fifty lines. The script is ~380 because the rest is per-app skip
+guards, palette fallbacks for keys not every theme defines, and reloading each app
+in place afterwards.
+
+This script renders **eight** outputs:
+
+| Output | Path | Notes |
+|---|---|---|
+| Alacritty colors | `~/.config/alacritty/omarchy-theme.toml` | `import` it from `alacritty.toml`; live reload |
+| Hyprland borders | `~/.config/hypr/theme.lua` | `hyprctl reload` |
+| Waybar colors    | `~/.config/waybar/colors.css` | `@import`ed by the shipped `style.css`; `pkill -USR2 waybar` |
+| Wallpaper        | `~/.config/hypr/hyprpaper.conf` | hyprpaper restarted |
+| btop             | `~/.config/btop/themes/omarchy.theme` | restart btop |
+| Neovim           | `~/.config/nvim/lua/plugins/omarchy-theme.lua` | LazyVim only |
+| kitty            | `~/.config/kitty/omarchy-theme.conf` | `include` it yourself |
+| foot             | `~/.config/foot/omarchy-theme.ini` | `include` it yourself |
+
+Each app is **skipped unless its binary is on `PATH`**, so the script is safe on a
+minimal system — and it does not skip a freshly installed app that has not created
+its config directory yet. btop also gets its `color_theme` line rewritten to point at the generated
+file. Neovim is skipped unless LazyVim is present, because both Neovim templates
+emit a LazyVim plugin spec — without it you'd get a file nothing reads. 15 of the
+22 themes ship a hand-picked colorscheme (nord uses nordfox); the rest fall back
+to the palette-driven `aether` template.
+
+It then reloads each app in place — `hyprctl reload`, `pkill -USR2 waybar`, and a
+hyprpaper restart (it only re-reads its config on start). btop and Neovim have no
+reload signal, so those two are reported rather than reloaded.
+
+**Templates still dormant**: ghostty, helix, obsidian, vscode, chromium, shell and
+more. Adding one is a few lines — read the template, render it, write it, reload
+the app. PRs welcome.
+
+Two behaviours to know:
+
+- Applying a theme **silently replaces your wallpaper** with that theme's first
+  background alphabetically. Hand-edits to `hyprpaper.conf` don't survive.
+- Most themes ship pre-baked config of their own (`hyprland.lua`, `btop.theme`,
+  `chromium.theme`, `vscode.json`). **This script ignores all of it** and renders
+  the palette through Omarchy's templates instead — the one exception is Neovim,
+  where a theme's own `neovim.lua` is preferred over the generic template. If you
+  want a theme's hand-tuned btop colors rather than the generated ones, copy
+  `themes/<name>/btop.theme` in yourself.
+
+---
+
+## Gaming: Ollama and VRAM
+
+Not Omarchy-related, but it belongs with an AMD desktop that also runs local models.
+
+A 16 GB card cannot hold a resident LLM **and** a 3440x1440 game. When it runs out,
+amdgpu resets the ring rather than failing gracefully — which presents as the GPU
+locking up mid-game, not as an out-of-memory error.
+
+Ollama keeps a model in VRAM for `OLLAMA_KEEP_ALIVE` (5 min default) after the last
+request. `config/gamemode.ini` runs `bin/llm-vram-release` on game start, which
+`ollama stop`s everything in `ollama ps`. There's no cleanup hook — the daemon
+reloads on the next request by itself.
+
+Governor and renice are deliberately **off** in that config: amd-pstate-epp already
+boosts under `powersave`, and renice/softrealtime lack the privileges gamemode has
+here. Both disabled keeps `gamemoded -t` clean. The hooks are the point, not the
+scheduling.
+
+### Discord over a fullscreen game
+
+`SUPER + D` toggles a **special workspace** holding Discord. A special workspace draws
+*over* the current one instead of switching away from it, so chat appears on top of a
+fullscreen game and dismisses again — the game never leaves fullscreen and is never
+told to redraw, which is the thing that makes alt-tabbing out of one go wrong.
+
+Two pieces make it work, both already in the configs:
+
+```lua
+-- omarchy-windows.lua: Discord is captured on launch, silently
+hl.window_rule({
+  name  = "discord-overlay",
+  match = { class = "discord" },
+  workspace = "special:discord silent",
+})
+
+-- omarchy-bindings.lua
+hl.bind("SUPER + D", hl.dsp.workspace.toggle_special("discord"), { description = "Discord overlay" })
+```
+
+Discord is **not** in the package lists above — install it yourself (`discord`, or the
+Flatpak) if you want this. Without it the bind is harmless: it toggles an empty
+workspace. If you use a different client, or the Flatpak reports a different class,
+check the real one with `hyprctl clients | grep class` and edit the rule — a `match`
+that hits nothing fails silently, and you just get a plain window on your current
+workspace.
+
+---
+
+## Known issue: clicking a workspace on the bar
+
+On **waybar 0.15.0 + Hyprland 0.56**, clicking a workspace number in the bar does
+nothing. The button is fine — waybar hardcodes the pre-Lua dispatcher string
+`dispatch workspace <id>`, and Hyprland's Lua dispatcher rejects it:
+
+```console
+$ hyprctl dispatch workspace 2
+error: [string "return hl.dispatch(workspace 2)"]:1: ')' expected near '2'
+$ hyprctl dispatch 'hl.dsp.focus({ workspace = 2 })'
+ok
+```
+
+The error goes back over IPC and is never surfaced, so the click looks ignored —
+[gotcha 6](#6-every-hyprctl-dispatch-in-an-external-config-is-a-lua-syntax-error)
+is the same root cause, except here the offending string is compiled into waybar
+rather than sitting in a config file you can fix. Hyprland has no
+legacy-dispatcher option, so nothing can be done from the Hyprland side either.
+
+**Already fixed upstream, just not released.**
+[Alexays/Waybar#5013](https://github.com/Alexays/Waybar/pull/5013) taught the
+module Hyprland's Lua dispatch protocol; both reports
+([#5008](https://github.com/Alexays/Waybar/issues/5008),
+[#5147](https://github.com/Alexays/Waybar/issues/5147)) were closed on it in
+July 2026. The newest waybar *release* is still 0.15.0 (February 2026), which
+predates the fix — so on distro packages the symptom is live. Three ways to deal
+with it, the last of which is a trap:
+
+- **Install `waybar-git`** (AUR, or chaotic-aur) and clicks work today. Simplest
+  real fix; the cost is tracking master.
+- **Wait for the next waybar release**, and switch workspaces meanwhile with
+  `SUPER+1..9` or by **scrolling over the bar** — that path works on 0.15.0,
+  because the shipped `on-scroll-up`/`on-scroll-down` are config strings and so
+  use the Lua form.
+- **Don't** swap in `ext/workspaces`, the other workaround those threads
+  suggest. It clicks fine, but the module has no special-workspace support —
+  which silently breaks the Discord overlay above.
+
+Config alone can't fix it: `hyprland/workspaces` has no per-button `on-click`
+hook, and the sway-style `"on-click": "activate"` is not an option on this
+module (waybar would run it as a shell command and swallow the built-in
+handler). Drop this section once a fixed waybar release lands.
+
+---
+
+## Working on this
+
+- Prefer editing the `.lua` files over the generated ones (`theme.lua`,
+  `hyprpaper.conf`) — regenerating a theme overwrites them.
+- Most Hyprland changes are live: `hyprctl reload`. Waybar needs `pkill -USR2 waybar`.
+- **Test risky compositor changes from your Plasma session**, so a broken Hyprland
+  config can't lock you out. This is the single most useful habit here.
+
+## Credits
+
+- [Omarchy](https://omarchy.org) by David Heinemeier Hansson — MIT
+- [mroboff/omarchy-on-cachyos](https://github.com/mroboff/omarchy-on-cachyos) — the
+  full-install approach, and prior art worth reading
+- [CachyOS](https://cachyos.org)
+
+## License
+
+MIT — see [LICENSE](LICENSE). Cherry-picked Omarchy configuration remains
+Copyright © David Heinemeier Hansson under MIT; the attribution and trademark
+notes live in [NOTICE](NOTICE), which keeps `LICENSE` byte-for-byte standard so
+GitHub detects it as MIT rather than "Other".

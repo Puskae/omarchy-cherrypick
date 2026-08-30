@@ -1,0 +1,17 @@
+Attribution and trademark notice for omarchy-cherrypick.
+
+The MIT license text in LICENSE is kept unmodified so that automated license
+detection recognises it. The notes below sat inside that file previously; they
+are informational and do not add terms to it.
+
+
+DERIVED WORK
+
+Portions of the Hyprland configuration in this repository are derived from
+Omarchy, Copyright (c) David Heinemeier Hansson, also under the MIT License.
+
+
+TRADEMARK
+
+Omarchy is a pending trademark of the Omacom Foundation. This project is not
+affiliated with, endorsed by, or a distribution of Omarchy.

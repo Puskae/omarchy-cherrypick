@@ -1,0 +1,12 @@
+#!/bin/sh
+# Unload every model Ollama currently holds in VRAM.
+#
+# Ollama keeps a model resident for OLLAMA_KEEP_ALIVE (5 min default) after the
+# last request, so VRAM stays claimed long after you have stopped using it.
+# `ollama stop` drops it immediately. The daemon keeps running and reloads on
+# the next request by itself, so there is nothing to undo afterwards.
+loaded=$(ollama ps 2>/dev/null | awk 'NR>1 && NF {print $1}')
+[ -z "$loaded" ] && exit 0
+echo "$loaded" | while read -r m; do ollama stop "$m"; done
+command -v notify-send >/dev/null && \
+  notify-send "VRAM released" "Unloaded: $(echo "$loaded" | tr '\n' ' ')"

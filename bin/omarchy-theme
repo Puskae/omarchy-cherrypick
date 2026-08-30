@@ -1,0 +1,378 @@
+#!/usr/bin/env python3
+"""Apply an Omarchy theme to Alacritty + Hyprland, without the Omarchy runtime.
+
+Renders ~/.local/share/omarchy/default/themed/*.tpl against a palette from
+~/.local/share/omarchy/themes/<name>/colors.toml.
+
+Usage:
+  omarchy-theme            # list themes, mark current
+  omarchy-theme <name>     # apply theme
+"""
+
+import os
+import re
+import shutil
+import sys
+import subprocess
+
+HOME = os.path.expanduser("~")
+SHARE = f"{HOME}/.local/share/omarchy"
+THEMES = f"{SHARE}/themes"
+TPL = f"{SHARE}/default/themed"
+CURRENT = f"{HOME}/.local/state/omarchy-theme"
+
+ALACRITTY_OUT = f"{HOME}/.config/alacritty/omarchy-theme.toml"
+HYPR_OUT = f"{HOME}/.config/hypr/theme.lua"
+WAYBAR_OUT = f"{HOME}/.config/waybar/colors.css"
+HYPRPAPER_OUT = f"{HOME}/.config/hypr/hyprpaper.conf"
+
+BTOP_DIR      = f"{HOME}/.config/btop"
+BTOP_OUT      = f"{BTOP_DIR}/themes/omarchy.theme"
+BTOP_CONF     = f"{BTOP_DIR}/btop.conf"
+NVIM_OUT      = f"{HOME}/.config/nvim/lua/plugins/omarchy-theme.lua"
+LAZYVIM_MARK  = f"{HOME}/.local/share/nvim/lazy/LazyVim"
+KITTY_OUT     = f"{HOME}/.config/kitty/omarchy-theme.conf"
+FOOT_OUT      = f"{HOME}/.config/foot/omarchy-theme.ini"
+
+
+def require_share():
+    """Omarchy's themes and templates are copied in by hand; say so if they aren't.
+
+    Without this the first run of a fresh checkout dies in os.listdir or open
+    with a traceback, which reads like a broken script rather than a missing
+    install step.
+    """
+    for path, what in ((THEMES, "themes"), (TPL, "templates")):
+        if not os.path.isdir(path):
+            sys.exit(
+                f"No Omarchy {what} at {path}\n"
+                "Copy them in first -- see 'Omarchy's themes and templates' in the README:\n"
+                "  git clone --depth 1 --branch v4.0.1 https://github.com/omacom/omarchy /tmp/omarchy"
+            )
+
+
+def read_palette(theme):
+    """Parse the flat key = "value" colors.toml."""
+    path = f"{THEMES}/{theme}/colors.toml"
+    if not os.path.exists(path):
+        sys.exit(f"No such theme: {theme}  (try: omarchy-theme)")
+
+    colors = {}
+    with open(path) as fh:
+        for line in fh:
+            m = re.match(r'^\s*([a-z_]+)\s*=\s*"([^"]*)"\s*$', line)
+            if m:
+                colors[m.group(1)] = m.group(2)
+
+    # Fallbacks for keys the templates reference but not every theme defines.
+    colors.setdefault("selection_background", colors.get("selection", colors.get("muted", "#444444")))
+    colors.setdefault("selection_foreground", colors.get("foreground", "#ffffff"))
+    colors.setdefault("bright_foreground", colors.get("foreground", "#ffffff"))
+    for name in ("red", "green", "yellow", "blue", "magenta", "cyan"):
+        colors.setdefault(f"bright_{name}", colors.get(name, "#ffffff"))
+
+    # foot.ini.tpl asks for "purple"; the palettes only define "magenta".
+    colors.setdefault("purple", colors.get("magenta", "#ffffff"))
+    colors.setdefault("bright_purple", colors.get("bright_magenta", colors["purple"]))
+
+    # foot wants bare rrggbb, and upstream expresses that as a "<key>_strip"
+    # variable rather than a template filter. Derive one for every colour --
+    # without these, every {{ x_strip }} slot is left as literal template text
+    # and the generated foot config is unusable.
+    for key, value in list(colors.items()):
+        if value.startswith("#"):
+            colors.setdefault(f"{key}_strip", value.lstrip("#"))
+
+    return colors
+
+
+def render(tpl_path, colors):
+    """Substitute {{ var }} placeholders."""
+    if not os.path.exists(tpl_path):
+        sys.exit(f"Missing template: {tpl_path}\n"
+                 "Recopy default/themed from Omarchy -- see the README.")
+    with open(tpl_path) as fh:
+        text = fh.read()
+
+    missing = set()
+
+    def sub(match):
+        key = match.group(1).strip()
+        if key not in colors:
+            missing.add(key)
+            return match.group(0)
+        return colors[key]
+
+    out = re.sub(r"\{\{\s*([a-z_]+)\s*\}\}", sub, text)
+    if missing:
+        print(f"  note: unresolved template vars: {', '.join(sorted(missing))}")
+    return out
+
+
+def to_rgb(hex_color):
+    """#rrggbb -> Hyprland rgb(rrggbb)."""
+    return "rgb(%s)" % hex_color.lstrip("#")
+
+
+def pick_wallpaper(theme):
+    """First real background shipped with the theme, if any."""
+    bg = f"{THEMES}/{theme}/backgrounds"
+    if not os.path.isdir(bg):
+        return None
+
+    # "omarchy.webp" is a tiny branding placeholder, not a usable wallpaper.
+    files = sorted(
+        f for f in os.listdir(bg)
+        if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp")) and f != "omarchy.webp"
+    )
+    return f"{bg}/{files[0]}" if files else None
+
+
+def write(path, text, header=None):
+    """Write a generated file, creating its directory."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as fh:
+        if header:
+            fh.write(header)
+        fh.write(text)
+
+
+ALACRITTY_CONF = f"{HOME}/.config/alacritty/alacritty.toml"
+
+
+def alacritty_import_note():
+    """Alacritty only reads the generated file if alacritty.toml imports it.
+
+    Nothing here writes alacritty.toml -- that is the user's own config -- so
+    the theme is inert until the import line exists. Say so rather than
+    reporting success on a terminal whose colors never change.
+    """
+    try:
+        with open(ALACRITTY_CONF) as fh:
+            if "omarchy-theme.toml" in fh.read():
+                return None
+    except OSError:
+        pass
+    return ("note: add this to " + ALACRITTY_CONF + " or the colors above are unused:\n"
+            '        [general]\n'
+            '        import = ["~/.config/alacritty/omarchy-theme.toml"]')
+
+
+def apply_btop(theme, colors):
+    """Render btop's theme and point btop.conf at it.
+
+    btop reads its theme once at startup and has no reload signal, so a running
+    btop keeps the old colors until it is restarted.
+    """
+    # Gate on the binary. btop does not create ~/.config/btop until it has been
+    # run once, so testing for the directory would silently skip a freshly
+    # installed btop -- and write() creates the directory anyway.
+    if not shutil.which("btop"):
+        return None
+
+    write(BTOP_OUT, render(f"{TPL}/btop.theme.tpl", colors),
+          f"# Generated by omarchy-theme from the '{theme}' Omarchy theme.\n"
+          "# Do not edit -- rerun `omarchy-theme <name>` instead.\n\n")
+
+    # btop.conf is the user's file; rewrite only the one line that selects a theme.
+    if os.path.exists(BTOP_CONF):
+        with open(BTOP_CONF) as fh:
+            conf = fh.read()
+        line = f'color_theme = "{BTOP_OUT}"'
+        if re.search(r'^\s*color_theme\s*=.*$', conf, re.M):
+            conf = re.sub(r'^\s*color_theme\s*=.*$', line, conf, count=1, flags=re.M)
+        else:
+            conf = conf.rstrip("\n") + "\n" + line + "\n"
+        with open(BTOP_CONF, "w") as fh:
+            fh.write(conf)
+
+    return "btop"
+
+
+def apply_neovim(theme, colors):
+    """Install the theme's Neovim colorscheme as a LazyVim plugin spec.
+
+    Most themes ship a hand-picked colorscheme (nord -> nordfox); the rest fall
+    back to the generic aether template driven by the palette. Both are LazyVim
+    plugin specs, so this is skipped entirely unless LazyVim is installed --
+    otherwise it would drop a file nothing ever reads.
+    """
+    if not os.path.isdir(LAZYVIM_MARK):
+        return None
+
+    own = f"{THEMES}/{theme}/neovim.lua"
+    if os.path.exists(own):
+        with open(own) as fh:
+            body = fh.read()
+    else:
+        body = render(f"{TPL}/neovim.lua.tpl", colors)
+
+    write(NVIM_OUT, body,
+          f"-- Generated by omarchy-theme from the '{theme}' Omarchy theme.\n"
+          "-- Do not edit -- rerun `omarchy-theme <name>` instead.\n\n")
+    return "neovim"
+
+
+def apply_terminals(theme, colors):
+    """kitty and foot, for whoever uses them alongside Alacritty."""
+    done = []
+    for name, tpl, out in (("kitty", "kitty.conf.tpl", KITTY_OUT),
+                           ("foot", "foot.ini.tpl", FOOT_OUT)):
+        if not shutil.which(name):
+            continue
+        comment = "#"
+        write(out, render(f"{TPL}/{tpl}", colors),
+              f"{comment} Generated by omarchy-theme from the '{theme}' Omarchy theme.\n"
+              f"{comment} Do not edit -- rerun `omarchy-theme <name>` instead.\n"
+              f"{comment} Include this from your own config.\n\n")
+        done.append(name)
+    return done
+
+
+def apply(theme):
+    require_share()
+    colors = read_palette(theme)
+    written = []
+    notes = []
+
+    # --- Alacritty: render the stock Omarchy template ---
+    # Skipped when Alacritty is not installed, like the outputs below.
+    if shutil.which("alacritty"):
+        write(ALACRITTY_OUT, render(f"{TPL}/alacritty.toml.tpl", colors),
+              f"# Generated by omarchy-theme from the '{theme}' Omarchy theme.\n"
+              "# Do not edit -- rerun `omarchy-theme <name>` instead.\n"
+              "# Your own settings live in alacritty.toml.\n\n")
+        written.append(ALACRITTY_OUT)
+        notes.append(alacritty_import_note())
+
+    # --- Hyprland: border colors from the same palette ---
+    accent = to_rgb(colors.get("accent", colors.get("blue", "#81a1c1")))
+    os.makedirs(os.path.dirname(HYPR_OUT), exist_ok=True)
+    with open(HYPR_OUT, "w") as fh:
+        fh.write(
+            f"-- Generated by omarchy-theme from the '{theme}' Omarchy theme.\n"
+            "-- Do not edit -- rerun `omarchy-theme <name>` instead.\n\n"
+            "hl.config({\n"
+            "  general = {\n"
+            "    col = {\n"
+            f'      active_border = "{accent}",\n'
+            '      inactive_border = "rgba(595959aa)",\n'
+            "    },\n"
+            "  },\n\n"
+            "  group = {\n"
+            "    col = {\n"
+            f'      border_active = "{accent}",\n'
+            '      border_inactive = "rgba(595959aa)",\n'
+            "    },\n"
+            "  },\n"
+            "})\n"
+        )
+    written.append(HYPR_OUT)
+
+    # --- Waybar: @define-color block consumed by style.css ---
+    # Gated on the binary, like everything else: gating on ~/.config/waybar
+    # existing meant a freshly installed waybar was skipped in silence, and
+    # style.css then @imported a colors.css that was never written.
+    if shutil.which("waybar"):
+        os.makedirs(os.path.dirname(WAYBAR_OUT), exist_ok=True)
+        with open(WAYBAR_OUT, "w") as fh:
+            fh.write(
+                f"/* Generated by omarchy-theme from the '{theme}' Omarchy theme. */\n"
+                "/* Do not edit -- rerun `omarchy-theme <name>` instead. */\n\n"
+            )
+            for var, key in (
+                ("bg", "background"), ("fg", "foreground"), ("accent", "accent"),
+                ("muted", "muted"), ("red", "red"), ("green", "green"),
+                ("yellow", "yellow"), ("blue", "blue"), ("magenta", "magenta"),
+                ("cyan", "cyan"),
+            ):
+                fh.write(f"@define-color {var} {colors.get(key, '#888888')};\n")
+        written.append(WAYBAR_OUT)
+
+    # --- Wallpaper: first background shipped with the theme ---
+    wallpaper = pick_wallpaper(theme)
+    if wallpaper:
+        # hyprpaper 0.8 replaced the flat `preload =` / `wallpaper = ,path` keys
+        # with a `wallpaper { }` block. The old form still parses without any
+        # error and then silently creates no wallpaper at all -- the only hint
+        # is "Monitor <name> has no target" in hyprpaper's own output.
+        with open(HYPRPAPER_OUT, "w") as fh:
+            fh.write(
+                "# Managed by `omarchy-theme <name>` -- it rewrites the path below\n"
+                "# to the selected theme's wallpaper. Edit the theme, not this file.\n"
+                "wallpaper {\n"
+                "    monitor =\n"
+                f"    path = {wallpaper}\n"
+                "}\n"
+                "splash = false\n"
+                "ipc = on\n"
+            )
+        written.append(HYPRPAPER_OUT)
+
+    # --- Apps beyond the core four, each skipped if not installed ---
+    extras = []
+    for fn in (apply_btop, apply_neovim):
+        got = fn(theme, colors)
+        if got:
+            extras.append(got)
+    extras += apply_terminals(theme, colors)
+
+    os.makedirs(os.path.dirname(CURRENT), exist_ok=True)
+    with open(CURRENT, "w") as fh:
+        fh.write(theme + "\n")
+
+    print(f"Applied theme: {theme}")
+    for path in written:
+        print(f"  {path}")
+    if extras:
+        print(f"  also themed: {', '.join(extras)}")
+    for note in notes:
+        if note:
+            print(f"  {note}")
+
+    # Alacritty picks it up via live_config_reload; Hyprland needs a nudge.
+    if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        subprocess.run(["hyprctl", "reload"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("  hyprctl reload: done")
+
+        # Waybar has no reload signal for CSS; SIGUSR2 restarts it in place.
+        if subprocess.run(["pkill", "-USR2", "waybar"],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+            print("  waybar reloaded")
+
+        if wallpaper and subprocess.run(["pgrep", "-x", "hyprpaper"],
+                                        stdout=subprocess.DEVNULL).returncode == 0:
+            # hyprpaper only re-reads its config on restart.
+            subprocess.run(["pkill", "-x", "hyprpaper"], stderr=subprocess.DEVNULL)
+            subprocess.Popen(["hyprpaper"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            print(f"  wallpaper: {os.path.basename(wallpaper)}")
+
+        if "btop" in extras:
+            print("  note: restart btop to pick up its new colors")
+        if "neovim" in extras:
+            print("  note: restart nvim; :Lazy sync if the colorscheme is new")
+
+
+def list_themes():
+    current = ""
+    if os.path.exists(CURRENT):
+        with open(CURRENT) as fh:
+            current = fh.read().strip()
+
+    require_share()
+
+    print("Omarchy themes:\n")
+    for theme in sorted(os.listdir(THEMES)):
+        if os.path.isdir(f"{THEMES}/{theme}"):
+            print(f"  {'*' if theme == current else ' '} {theme}")
+    print("\nApply with: omarchy-theme <name>")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        list_themes()
+    elif sys.argv[1] in ("-h", "--help"):
+        print(__doc__.strip())
+    else:
+        apply(sys.argv[1])

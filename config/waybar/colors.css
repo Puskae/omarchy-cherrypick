@@ -1,0 +1,22 @@
+/* Fallback palette. `omarchy-theme <name>` overwrites this file with the
+   selected theme's colors -- this copy exists only so the bar is styled
+   before the first theme is applied.
+
+   style.css @imports this file, and GTK drops the *entire* stylesheet if an
+   @import cannot be resolved. Without a committed fallback, logging into
+   Hyprland before running omarchy-theme gives an unstyled waybar and no
+   obvious reason why.
+
+   Neutral greys on purpose: this is not a theme, it is the state before one.
+   The names below are exactly the ones omarchy-theme writes. */
+
+@define-color bg      #1c1e22;
+@define-color fg      #d6d8dc;
+@define-color accent  #7f9cbf;
+@define-color muted   #6b7078;
+@define-color red     #c2686e;
+@define-color green   #8fa876;
+@define-color yellow  #d2ab6a;
+@define-color blue    #7f9cbf;
+@define-color magenta #a487ad;
+@define-color cyan    #7fadb2;

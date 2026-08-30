@@ -1,0 +1,120 @@
+/* Omarchy-flavoured waybar: flat, square, low-contrast until something
+   wants attention. Palette comes from colors.css, which is regenerated
+   by `omarchy-theme <name>` -- do not hardcode colors here. */
+
+@import url("colors.css");
+
+* {
+  font-family: "MesloLGM Nerd Font", "Noto Sans Mono", monospace;
+  font-size: 12px;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+}
+
+window#waybar {
+  background-color: alpha(@bg, 0.92);
+  color: @fg;
+}
+
+/* Every module gets the same rhythm; only state changes the color. */
+#workspaces,
+#submap,
+#clock,
+#cpu,
+#memory,
+#network,
+#pulseaudio,
+#custom-media,
+#custom-power,
+#tray {
+  padding: 0 10px;
+  color: @fg;
+  background-color: transparent;
+}
+
+#workspaces {
+  padding: 0 4px;
+}
+
+#workspaces button {
+  padding: 0 8px;
+  color: @muted;
+  background-color: transparent;
+  /* Reserve the underline on every button so the row doesn't shift
+     by 2px when a workspace becomes active. */
+  border-bottom: 2px solid transparent;
+}
+
+#workspaces button:hover {
+  color: @fg;
+  background-color: alpha(@accent, 0.15);
+  /* Waybar's default hover adds a box-shadow; kill it for a flat look. */
+  box-shadow: none;
+  text-shadow: none;
+}
+
+#workspaces button.active {
+  color: @accent;
+  border-bottom: 2px solid @accent;
+}
+
+#workspaces button.urgent {
+  color: @bg;
+  background-color: @red;
+}
+
+#submap {
+  color: @bg;
+  background-color: @yellow;
+}
+
+#clock {
+  color: @fg;
+  font-weight: bold;
+}
+
+#custom-media {
+  color: @green;
+}
+
+#pulseaudio.muted {
+  color: @muted;
+}
+
+#network.disconnected {
+  color: @red;
+}
+
+#cpu.warning,
+#memory.warning {
+  color: @yellow;
+}
+
+#cpu.critical,
+#memory.critical {
+  color: @red;
+}
+
+#custom-power {
+  color: @red;
+  padding-right: 12px;
+}
+
+#tray {
+  padding-right: 6px;
+}
+
+#tray > .passive {
+  -gtk-icon-effect: dim;
+}
+
+#tray > .needs-attention {
+  -gtk-icon-effect: highlight;
+}
+
+tooltip {
+  background-color: @bg;
+  border: 1px solid @accent;
+  color: @fg;
+}

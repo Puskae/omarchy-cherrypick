@@ -1,0 +1,19 @@
+#!/bin/sh
+# Toggle a region screen recording. wf-recorder finalises the file on SIGINT,
+# so stopping it any other way leaves an unplayable container.
+if pkill -INT -x wf-recorder 2>/dev/null; then
+  notify-send "Recording stopped" "Saved to $(xdg-user-dir VIDEOS 2>/dev/null || echo ~/Videos)"
+else
+  # Ask for the region *before* claiming a recording started. Pressing Escape
+  # cancels slurp and prints nothing, and `wf-recorder -g ""` then dies -- which
+  # would leave a "Recording started" notification standing over nothing running.
+  geometry=$(slurp) || exit 0
+  [ -z "$geometry" ] && exit 0
+
+  # xdg-user-dir resolves the real Videos directory, which is localised --
+  # hardcoding ~/Videos creates a stray English folder on a non-English system.
+  dir=$(xdg-user-dir VIDEOS 2>/dev/null || echo "$HOME/Videos")
+  mkdir -p "$dir"
+  notify-send "Recording started" "Same bind again to stop"
+  wf-recorder -g "$geometry" -f "$dir/$(date +%Y%m%d-%H%M%S).mp4"
+fi
