@@ -14,8 +14,11 @@
   "modules-right": [
     "tray",
     "custom/media",
+    "custom/brightness",
     "pulseaudio",
+    "bluetooth",
     "network",
+    "custom/tailscale",
     "cpu",
     "memory",
     "custom/power"
@@ -130,6 +133,57 @@
     "on-scroll-up": "playerctl next",
     "on-scroll-down": "playerctl previous",
     "tooltip": false
+  },
+
+  // Monitor brightness over DDC/CI. This is a desktop: there is no
+  // /sys/class/backlight and brightnessctl has nothing to talk to, so the
+  // control lives on the monitor's I2C bus and ddcutil drives it.
+  //
+  // A DDC read costs about a second, which is far too slow to poll, so the
+  // module is read "once" and then refreshed only when hypr-brightness signals
+  // it -- SIGRTMIN+8, matching WAYBAR_SIGNAL in the script.
+  //
+  // The module disappears on a machine with no DDC/CI monitor, because
+  // hypr-brightness exits non-zero and prints nothing.
+  "custom/brightness": {
+    "format": "󰃟 {}%",
+    "exec": "hypr-brightness get",
+    "interval": "once",
+    "signal": 8,
+    "on-scroll-up": "hypr-brightness up",
+    "on-scroll-down": "hypr-brightness down",
+    // Re-reads from the monitor, for when its own buttons have been used.
+    "on-click": "hypr-brightness sync",
+    "tooltip": false
+  },
+
+  // Built into waybar (it speaks to bluez over D-Bus), so nothing to install
+  // beyond bluez/bluez-utils, which are already required for the adapter.
+  //
+  // blueman is not in the package list -- there is no GUI here by default, so
+  // the click falls back to bluetoothctl in a terminal. Install blueman or
+  // overskride if you want a real panel and the first branch will win.
+  "bluetooth": {
+    "format": "󰂯",
+    "format-disabled": "󰂲",
+    "format-off": "󰂲",
+    "format-connected": "󰂱 {num_connections}",
+    "tooltip-format": "{controller_alias}\n{status}",
+    "tooltip-format-connected": "{controller_alias}\n{device_enumerate}",
+    "tooltip-format-enumerate-connected": "{device_alias}  {device_address}",
+    "on-click": "blueman-manager 2>/dev/null || alacritty --title bluetooth -e bluetoothctl"
+  },
+
+  // Read-only: `tailscale up`/`down` need root unless an operator is set
+  // (`sudo tailscale set --operator=$USER`), and a bar button that pops a
+  // password prompt on a stray click is worse than one that just reports.
+  // Status is cheap -- a few milliseconds -- so 30s polling costs nothing.
+  "custom/tailscale": {
+    "format": "{}",
+    "return-type": "json",
+    "interval": 30,
+    "exec": "hypr-tailscale",
+    "on-click": "alacritty --title tailscale -e sh -c 'hypr-tailscale peers; echo; read -p \"[enter] \"'"
   },
 
   "custom/power": {

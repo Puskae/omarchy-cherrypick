@@ -116,6 +116,8 @@ bin/omarchy-theme        theme switcher; renders Omarchy's templates with no run
 bin/llm-vram-release     frees GPU VRAM from Ollama before a game starts
 bin/hypr-cheatsheet      keybinding cheatsheet in a terminal
 bin/hypr-record          screen-recording toggle
+bin/hypr-brightness      monitor brightness over DDC/CI (desktops have no backlight)
+bin/hypr-tailscale       tailscale status as a waybar module
 hypr/                    the Lua config set (hyprland.lua + 4 modules),
                          plus hypridle.conf and hyprlock.conf
 config/waybar/           bar config + stylesheet + a fallback colors.css
@@ -151,8 +153,9 @@ could not be, because those binaries only exist inside an Omarchy install.
 - **`omarchy-menu`** -- the `SUPER + CTRL + <letter>` menus (capture, share,
   theme, background, hardware, system). `SUPER + SPACE` opens walker here instead.
 - **`omarchy-shell`** -- Omarchy's Quickshell bar and its audio, bluetooth,
-  network, clipboard and calendar panels. Waybar stands in for the bar; the
-  panels have no equivalent.
+  network, clipboard and calendar panels. Waybar stands in for the bar, and
+  [bar modules](#bar-modules-bluetooth-tailscale-brightness) cover bluetooth,
+  tailscale and monitor brightness; the panels themselves have no equivalent.
 - **The capture suite** -- screenshot menus, OCR text extraction, the webcam
   overlay, the recording menu. `grim`/`slurp`/`hyprpicker` and `bin/hypr-record`
   cover the common cases from the keyboard.
@@ -235,7 +238,16 @@ Optional, if you want the gaming hooks or the apps the configs assume:
 ```sh
 sudo pacman -S --needed gamemode gamescope mangohud   # gaming
 sudo pacman -S --needed btop neovim                   # apps
+sudo pacman -S --needed ddcutil                       # bar: monitor brightness
+sudo pacman -S --needed tailscale                     # bar: tailscale status
+sudo pacman -S --needed blueman                       # bar: bluetooth panel on click
 ```
+
+The last three back optional bar modules — each one hides itself when its tool is
+absent, so skipping them costs you nothing but the module. See
+[Bar modules](#bar-modules-bluetooth-tailscale-brightness). Bluetooth itself is
+built into waybar and needs only `bluez`/`bluez-utils`; `blueman` is just what the
+click opens.
 
 CachyOS already ships `wireplumber` (for `wpctl`), `networkmanager` (for `nmtui`,
 which `SUPER + CTRL + W` and the bar's network module both open), `firefox` and —
@@ -320,7 +332,8 @@ sed -i "s|/home/yourusername|$HOME|" ~/.config/gamemode.ini
 
 # git preserves the exec bit, so this is only needed if you copied by hand.
 chmod +x ~/.local/bin/omarchy-theme ~/.local/bin/llm-vram-release \
-         ~/.local/bin/hypr-cheatsheet ~/.local/bin/hypr-record
+         ~/.local/bin/hypr-cheatsheet ~/.local/bin/hypr-record \
+         ~/.local/bin/hypr-brightness ~/.local/bin/hypr-tailscale
 
 omarchy-theme                 # list themes
 omarchy-theme nord            # apply one
@@ -567,6 +580,64 @@ Two things make this worse than it needs to be:
   only thing that can wake the display — so a second mistake leaves you pressing
   keys at a black monitor with a machine that is fine. Omarchy sets both `true`;
   `hyprland.lua` here does too.
+
+## Bar modules: bluetooth, tailscale, brightness
+
+Omarchy's bar carries panels for these; those are Quickshell components and are
+not here. Waybar covers the same ground with three modules, and **each one hides
+itself when its backing tool is missing**, so none of them is a hard dependency.
+
+**Bluetooth** is built into waybar — it speaks to bluez over D-Bus, so `bluez`
+and `bluez-utils` (already needed for the adapter) are the whole requirement. It
+shows the connected device count and enumerates paired devices in the tooltip.
+Clicking wants a GUI: `blueman-manager` if you have it, otherwise `bluetoothctl`
+in a terminal. `blueman` is deliberately not in the package list.
+
+**Tailscale** (`bin/hypr-tailscale`) reports state, your tailnet IP, how many
+peers are online, and the exit node if one is in use. Clicking lists the peers in
+a terminal. It is **read-only on purpose**: `tailscale up` and `down` need root
+unless an operator is set, and a bar button that pops a password prompt on a
+stray click is worse than one that just tells you the truth. If you want it to
+toggle, run `sudo tailscale set --operator=$USER` first and wire the action up
+yourself.
+
+**Brightness** (`bin/hypr-brightness`) is the interesting one on a desktop.
+There is no `/sys/class/backlight` — the panel is on the far end of a
+DisplayPort cable — so `brightnessctl` has nothing to talk to. The control lives
+on the monitor's I2C side channel, DDC/CI, and `ddcutil` drives it (VCP code
+`0x10`). Needs the `ddcutil` package and the `i2c-dev` module; **no root**,
+because logind puts an ACL on `/dev/i2c-*` for the active seat. If it does not
+work, look for the `+` marking that ACL in `ls -l /dev/i2c-*`, and otherwise add
+yourself to the `i2c` group.
+
+DDC is slow — about **1s** for a read, **0.4s** for a write, and that is the wire,
+not ddcutil. Polling it in the bar would be absurd, so the value is cached in
+`$XDG_RUNTIME_DIR` and the module is read `"once"`, then refreshed only when the
+script signals it (`SIGRTMIN+8`). Scroll over the module to change brightness;
+click to re-read from the monitor if you have used its own buttons.
+
+**The script is more than a `setvcp` wrapper, and the reason is worth knowing if
+you write your own.** A scroll fires a keypress per tick, so the naive version
+starts a process per tick, each wanting half a second on a bus that admits one
+user at a time. They collide, ddcutil fails its *own* flock, and — this is the
+part that bites — it prints the diagnostic **on stdout**, where a bar module
+happily renders it. The symptom is a sluggish wheel and then `wait%` in the bar,
+because "wait" is the first word of `wait for diagnostics: locking call ...`.
+
+So the script splits the two concerns. The cached value is the *wanted* value,
+updated instantly under a short lock with waybar signalled immediately, so the
+number tracks the wheel and never waits on I2C. A separate single writer holds a
+`flock` and re-reads the wanted value after each write, collapsing twenty ticks
+into the two or three the bus can absorb while still finishing on the last one;
+any invocation that finds the lock taken returns at once (~20ms) rather than
+queueing. Every value is checked against `^[0-9]{1,3}$` and `<= 100` before it is
+cached, so a diagnostic can never reach the bar again.
+
+Not every monitor answers DDC/CI, and some need it enabled in their OSD first.
+`ddcutil detect` is the test — if it finds nothing, the module simply does not
+appear.
+
+---
 
 ## Theming without the runtime
 

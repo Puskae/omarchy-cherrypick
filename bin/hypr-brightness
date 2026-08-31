@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# Monitor brightness over DDC/CI, for a desktop with no backlight device.
+#
+# A laptop has /sys/class/backlight and brightnessctl. A desktop has neither:
+# the panel is on the other end of a DisplayPort cable, and the only way to its
+# brightness control is DDC/CI -- a side channel on the monitor's I2C bus, which
+# ddcutil speaks. VCP code 0x10 is brightness.
+#
+# Usage: hypr-brightness [get|up|down|set <0-100>|sync]
+#
+# Needs ddcutil and the i2c-dev module. No root: logind puts an ACL on
+# /dev/i2c-* for the active seat's user, so this works as you. If it does not,
+# check `ls -l /dev/i2c-*` for the "+" that marks the ACL, and otherwise add
+# yourself to the i2c group.
+#
+# ------------------------------------------------------------------------
+# Why this is more than a wrapper around setvcp
+#
+# DDC is slow: about a second for a read and half of one for a write, and that
+# is the wire, not ddcutil. A scroll over the bar module fires a keypress per
+# tick, so the naive version starts a process per tick, each one taking half a
+# second on a bus that admits a single user at a time. They collide, ddcutil
+# fails its own flock and prints a diagnostic on stdout, and the bar goes
+# sluggish and then shows a word instead of a number.
+#
+# So there are two separated concerns:
+#
+#   * The cached value is the *wanted* value, updated instantly under a short
+#     lock, with waybar signalled immediately. The number in the bar tracks the
+#     scroll wheel and never waits on I2C.
+#   * A single writer applies it to the monitor, holding a lock and re-reading
+#     the wanted value after every write. Twenty ticks collapse into the two or
+#     three writes the bus can actually absorb, and the last one always lands.
+#
+# Nothing else changes the monitor's brightness, so the cache cannot silently
+# drift; `sync` forces a re-read anyway if you have used the monitor's buttons.
+# ------------------------------------------------------------------------
+
+set -euo pipefail
+
+STEP=5
+WAYBAR_SIGNAL=8   # matches "signal" on custom/brightness in the waybar config
+
+# The caches are meaningless across a reboot, and the bus number can change when
+# a monitor is replugged, so the runtime dir is the right home for them.
+cache_dir="${XDG_RUNTIME_DIR:-/tmp}"
+bus_cache="$cache_dir/hypr-brightness.bus"
+value_cache="$cache_dir/hypr-brightness.value"
+write_lock="$cache_dir/hypr-brightness.write.lock"
+value_lock="$cache_dir/hypr-brightness.value.lock"
+
+die() { echo "$*" >&2; exit 1; }
+
+command -v ddcutil >/dev/null || die "ddcutil is not installed"
+
+# Anything that is not a plain 0-100 is not a brightness. ddcutil prints its
+# diagnostics on stdout, so without this check an I2C error ends up cached and
+# then rendered in the bar.
+valid() { [[ ${1:-} =~ ^[0-9]{1,3}$ ]] && (( ${1} <= 100 )); }
+
+# The I2C bus of the first monitor that answers DDC. `ddcutil detect` probes
+# every bus and takes seconds, so the answer is cached for the session.
+find_bus() {
+  local bus
+  if [[ -s $bus_cache ]]; then
+    bus=$(<"$bus_cache")
+    [[ $bus =~ ^[0-9]+$ ]] && { printf '%s' "$bus"; return; }
+  fi
+
+  # Match the device path itself rather than filtering for digits: the bus name
+  # "i2c-9" carries a 2 inside "i2c", so stripping non-digits yields 29.
+  bus=$(ddcutil detect --brief 2>/dev/null |
+        sed -n 's|^ *I2C bus: */dev/i2c-\([0-9]\+\) *$|\1|p' | head -1)
+  [[ -n $bus ]] || die "no DDC/CI monitor found (ddcutil detect came back empty)"
+
+  printf '%s' "$bus" > "$bus_cache"
+  printf '%s' "$bus"
+}
+
+# Ask the monitor. Only the "VCP 10" line is considered, and only if its value
+# field survives the check above.
+read_brightness() {
+  local out value
+  out=$(ddcutil --bus "$(find_bus)" getvcp 10 --brief 2>/dev/null |
+        grep -m1 '^VCP 10 ' || true)
+  value=$(awk '{ print $4 }' <<<"$out")
+  valid "$value" || return 1
+  printf '%s' "$value"
+}
+
+cached() {
+  local value
+  [[ -s $value_cache ]] || return 1
+  value=$(<"$value_cache")
+  valid "$value" || return 1
+  printf '%s' "$value"
+}
+
+# The wanted value: whatever is cached, else whatever the monitor says.
+current() {
+  cached && return 0
+  local value
+  value=$(read_brightness) || die "could not read brightness"
+  printf '%s' "$value" > "$value_cache"
+  printf '%s' "$value"
+}
+
+# Push the wanted value to the monitor. One writer at a time; the holder keeps
+# going until the cache stops moving, so it always finishes on the newest value
+# and every other invocation can return immediately.
+flush() {
+  exec 9>"$write_lock"
+  # Non-blocking: if someone else holds the lock, they will pick up the value
+  # written below on their next lap. Queueing here is exactly the sluggishness
+  # this is meant to avoid.
+  flock -n 9 || return 0
+
+  local wanted applied=""
+  while :; do
+    wanted=$(cached) || return 0
+    [[ $wanted == "$applied" ]] && return 0
+    ddcutil --bus "$(find_bus)" setvcp 10 "$wanted" >/dev/null 2>&1 || return 0
+    applied=$wanted
+  done
+}
+
+# Update the wanted value and tell the bar at once. The lock is held only for
+# the read-modify-write, so two ticks arriving together cannot both read the
+# same starting value and lose a step between them.
+nudge() {
+  local delta=$1 value
+
+  exec 8>"$value_lock"
+  flock 8
+  value=$(current)
+  value=$(( value + delta ))
+  # Clamp rather than let ddcutil reject the value: at the ends of the range a
+  # keypress should stop, not error.
+  (( value < 0 )) && value=0
+  (( value > 100 )) && value=100
+  printf '%s' "$value" > "$value_cache"
+  flock -u 8
+
+  # Signal before touching I2C, so the bar tracks the wheel rather than the bus.
+  pkill -RTMIN+$WAYBAR_SIGNAL waybar 2>/dev/null || true
+  printf '%s\n' "$value"
+
+  flush
+}
+
+case "${1:-get}" in
+  get)   current; echo ;;
+  up)    nudge "${2:-$STEP}" ;;
+  down)  nudge "-${2:-$STEP}" ;;
+  set)   valid "${2:-}" || die "usage: hypr-brightness set <0-100>"
+         printf '%s' "$2" > "$value_cache"
+         pkill -RTMIN+$WAYBAR_SIGNAL waybar 2>/dev/null || true
+         printf '%s\n' "$2"
+         flush ;;
+  sync)  rm -f "$value_cache" "$bus_cache"
+         current; echo
+         pkill -RTMIN+$WAYBAR_SIGNAL waybar 2>/dev/null || true ;;
+  *)     die "usage: hypr-brightness [get|up|down|set <0-100>|sync]" ;;
+esac

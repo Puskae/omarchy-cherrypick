@@ -27,6 +27,9 @@ window#waybar {
 #pulseaudio,
 #custom-media,
 #custom-menu,
+#custom-brightness,
+#custom-tailscale,
+#bluetooth,
 #custom-power,
 #tray {
   padding: 0 10px;
@@ -107,6 +110,29 @@ window#waybar {
 #cpu.critical,
 #memory.critical {
   color: @red;
+}
+
+#bluetooth.connected {
+  color: @blue;
+}
+
+#bluetooth.disabled,
+#bluetooth.off {
+  color: @muted;
+}
+
+/* Up and routing-through-an-exit-node are different enough to be worth
+   distinguishing: with an exit node, all traffic leaves via another machine. */
+#custom-tailscale.up {
+  color: @green;
+}
+
+#custom-tailscale.exit-node {
+  color: @yellow;
+}
+
+#custom-tailscale.down {
+  color: @muted;
 }
 
 #custom-power {
