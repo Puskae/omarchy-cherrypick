@@ -26,11 +26,24 @@ window#waybar {
 #network,
 #pulseaudio,
 #custom-media,
+#custom-menu,
 #custom-power,
 #tray {
   padding: 0 10px;
   color: @fg;
   background-color: transparent;
+}
+
+/* The launcher button. Slightly larger than the text modules, because it is a
+   glyph rather than a label, and it anchors the left end of the bar. */
+#custom-menu {
+  color: @accent;
+  font-size: 15px;
+  padding: 0 12px;
+}
+
+#custom-menu:hover {
+  background-color: alpha(@accent, 0.15);
 }
 
 #workspaces {

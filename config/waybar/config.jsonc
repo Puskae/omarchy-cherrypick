@@ -9,7 +9,7 @@
   "height": 26,
   "spacing": 0,
 
-  "modules-left": ["hyprland/workspaces", "hyprland/submap"],
+  "modules-left": ["custom/menu", "hyprland/workspaces", "hyprland/submap"],
   "modules-center": ["clock"],
   "modules-right": [
     "tray",
@@ -20,6 +20,20 @@
     "memory",
     "custom/power"
   ],
+
+  // Omarchy puts a logo button at the far left of its bar that opens the menu.
+  // That menu is a Quickshell component and isn't here, so this opens walker --
+  // the same thing SUPER + SPACE does. walker's own close_when_open makes a
+  // second click dismiss it.
+  //
+  // The glyph is the generic "apps" grid rather than Omarchy's logo: this repo
+  // is not affiliated with Omarchy and should not ship its mark. Swap in 󰣇
+  // (Arch) or anything else your Nerd Font has.
+  "custom/menu": {
+    "format": "󰀻",
+    "tooltip-format": "Launcher  (SUPER + SPACE)",
+    "on-click": "walker"
+  },
 
   "hyprland/workspaces": {
     // No "on-click" here: that's a sway/workspaces option. On

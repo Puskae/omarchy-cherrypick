@@ -119,6 +119,7 @@ bin/hypr-record          screen-recording toggle
 hypr/                    the Lua config set (hyprland.lua + 4 modules),
                          plus hypridle.conf and hyprlock.conf
 config/waybar/           bar config + stylesheet + a fallback colors.css
+config/walker/           launcher stylesheet template, rendered per theme
 config/gamemode.ini      gamemode hooks
 config/MangoHud.conf     hidden-by-default overlay (hyprland.lua sets MANGOHUD=1)
 ```
@@ -307,6 +308,8 @@ mkdir -p ~/.config/hypr ~/.config/waybar ~/.config/MangoHud ~/.local/bin
 
 cp hypr/*              ~/.config/hypr/
 cp config/waybar/*     ~/.config/waybar/
+mkdir -p ~/.config/walker/themes/omarchy
+cp config/walker/style.css.tpl ~/.config/walker/themes/omarchy/
 cp config/MangoHud.conf ~/.config/MangoHud/
 cp config/gamemode.ini ~/.config/
 cp bin/*               ~/.local/bin/
@@ -577,7 +580,7 @@ core of it is about fifty lines. The script is ~380 because the rest is per-app 
 guards, palette fallbacks for keys not every theme defines, and reloading each app
 in place afterwards.
 
-This script renders **eight** outputs:
+This script renders **nine** outputs:
 
 | Output | Path | Notes |
 |---|---|---|
@@ -589,6 +592,7 @@ This script renders **eight** outputs:
 | Neovim           | `~/.config/nvim/lua/plugins/omarchy-theme.lua` | LazyVim only |
 | kitty            | `~/.config/kitty/omarchy-theme.conf` | `include` it yourself |
 | foot             | `~/.config/foot/omarchy-theme.ini` | `include` it yourself |
+| walker           | `~/.config/walker/themes/omarchy/style.css` | walker restarted |
 
 Each app is **skipped unless its binary is on `PATH`**, so the script is safe on a
 minimal system — and it does not skip a freshly installed app that has not created
@@ -598,9 +602,27 @@ emit a LazyVim plugin spec — without it you'd get a file nothing reads. 15 of 
 22 themes ship a hand-picked colorscheme (nord uses nordfox); the rest fall back
 to the palette-driven `aether` template.
 
+**walker is the one output with no Omarchy template behind it.** Omarchy ships no
+walker theme, because its launcher is a Quickshell component rather than walker
+(see [What Omarchy has that this doesn't](#what-omarchy-has-that-this-doesnt)), so
+`config/walker/style.css.tpl` is this repo's own — an interpretation of Omarchy's
+flat, square look driven by the same six palette keys every theme defines. It is
+installed *into* the generated theme directory and rendered to `style.css` beside
+itself, so the template travels with the theme it produces.
+
+A walker theme is layout XML plus a stylesheet. Only the stylesheet is generated;
+the XML is copied once from the installed walker's own stock theme
+(`/etc/xdg/walker/themes/default/`) rather than vendored here, so it tracks your
+walker version instead of a pinned copy. `~/.config/walker/config.toml` gets its
+`theme =` line pointed at `omarchy` — created from the system default first if you
+have no config of your own, and otherwise left alone apart from that one line.
+
 It then reloads each app in place — `hyprctl reload`, `pkill -USR2 waybar`, and a
-hyprpaper restart (it only re-reads its config on start). btop and Neovim have no
-reload signal, so those two are reported rather than reloaded.
+hyprpaper restart (it only re-reads its config on start). walker reads its theme at
+startup too, so its `--gapplication-service` daemon is restarted — but only if one
+was already running, so this never leaves a stray daemon on a machine that does not
+autostart it. btop and Neovim have no reload signal, so those two are reported
+rather than reloaded.
 
 **Templates still dormant**: ghostty, helix, obsidian, vscode, chromium, shell and
 more. Adding one is a few lines — read the template, render it, write it, reload
