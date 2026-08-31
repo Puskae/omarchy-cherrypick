@@ -116,7 +116,7 @@ bin/omarchy-theme        theme switcher; renders Omarchy's templates with no run
 bin/llm-vram-release     frees GPU VRAM from Ollama before a game starts
 bin/hypr-cheatsheet      keybinding cheatsheet in a terminal
 bin/hypr-record          screen-recording toggle
-hypr/                    the Lua config set (hyprland.lua + 3 modules),
+hypr/                    the Lua config set (hyprland.lua + 4 modules),
                          plus hypridle.conf and hyprlock.conf
 config/waybar/           bar config + stylesheet + a fallback colors.css
 config/gamemode.ini      gamemode hooks
@@ -137,6 +137,50 @@ overwrites it.
 **gawk** extension. Nothing to install on an Arch-family system — gawk is a dependency
 of both `base` and `pacman`, so it is always there — but the script prints nothing
 useful under mawk or busybox awk if you take it somewhere else.
+
+## What Omarchy has that this doesn't
+
+Most of Omarchy is helper scripts. Anything in its config that is plain Hyprland
+Lua has been brought over -- the window rules, the look and feel, the Quake
+console, the layout toggles. Anything that shells out to an `omarchy-*` binary
+could not be, because those binaries only exist inside an Omarchy install.
+
+**Not here, and not coming** -- these are the runtime, not configuration:
+
+- **`omarchy-menu`** -- the `SUPER + CTRL + <letter>` menus (capture, share,
+  theme, background, hardware, system). `SUPER + SPACE` opens walker here instead.
+- **`omarchy-shell`** -- Omarchy's Quickshell bar and its audio, bluetooth,
+  network, clipboard and calendar panels. Waybar stands in for the bar; the
+  panels have no equivalent.
+- **The capture suite** -- screenshot menus, OCR text extraction, the webcam
+  overlay, the recording menu. `grim`/`slurp`/`hyprpicker` and `bin/hypr-record`
+  cover the common cases from the keyboard.
+- **Reminders, weather and time notifications, transcode, the agent console,
+  `omacalc`, the screensaver, voxtype and tensaku.**
+- **`omarchy-update`** and the pacman hooks around it. Nothing here needs
+  updating but the configs, and `git pull` does that.
+- **Window helpers with saved state**: pop-out, save/restore width, tiled
+  fullscreen, per-workspace layout memory, monitor scaling steps. These keep
+  their state in files an `omarchy-*` script writes.
+
+**Not here yet, but cheap to add** -- if you want them, they are a copy out of
+`~/.local/share/omarchy/default/` after the clone in
+[step 2](#2-omarchys-themes-and-templates):
+
+- `envs.lua`'s Wayland block (`GDK_BACKEND`, `QT_QPA_PLATFORM`,
+  `MOZ_ENABLE_WAYLAND`, `ELECTRON_OZONE_PLATFORM_HINT`, and
+  `XDG_CURRENT_DESKTOP=Hyprland`, which is what makes screen sharing pick the
+  right portal).
+- `xcompose` -- emoji compose sequences, plus `kb_options = "compose:caps"`.
+- `fontconfig/conf.avail/50-omarchy.conf` -- Omarchy's font substitutions.
+- `firefox/policies.json` -- VAAPI hardware video decoding, worth having on AMD.
+- `bindings/clipboard.lua` -- universal `SUPER + C/V/X` that emit the terminal's
+  keys in a terminal and the usual ones everywhere else.
+
+Everything else in that tree assumes the runtime. If a file mentions `o.bind`,
+`o.window` or `require("default.hypr...")`, it will not load here as-is: those
+are Omarchy's own helpers, and the rules have to be rewritten against the stock
+`hl.bind` / `hl.window_rule` API the way the modules in `hypr/` are.
 
 ## Install
 
@@ -613,6 +657,10 @@ hl.window_rule({
 -- omarchy-bindings.lua
 hl.bind("SUPER + D", hl.dsp.workspace.toggle_special("discord"), { description = "Discord overlay" })
 ```
+
+`omarchy-qconsole.lua` sets `decoration:dim_special = 0.6`, which dims whatever
+is underneath *any* special workspace — so a game darkens while the Discord
+overlay is up. Set it to `0` in that file if you would rather it did not.
 
 Discord is **not** in the package lists above — install it yourself (`discord`, or the
 Flatpak) if you want this. Without it the bind is harmless: it toggles an empty

@@ -28,13 +28,124 @@ for name, pattern in pairs(opaque) do
   })
 end
 
--- Picture-in-picture: opaque, floating, and pinned above everything.
+-- Picture-in-picture: opaque, floating, pinned above everything, and parked in
+-- the top-right corner at a fixed 16:9. Without the size and move it maps
+-- wherever the browser asks, which on an ultrawide is usually the middle of the
+-- screen and in the way.
 hl.window_rule({
   name  = "omarchy-pip",
   match = { title = "(Picture.?in.?[Pp]icture)" },
   opacity = "1.0 1.0",
   float = true,
   pin   = true,
+  size  = { 600, 338 },
+  keep_aspect_ratio = true,
+  border_size = 0,
+  move  = { "(monitor_w-window_w-40)", "(monitor_h*0.04)" },
+})
+
+-- Google Meet names its PiP window after the meeting instead of calling it
+-- "Picture-in-Picture", so the rule above never sees it.
+hl.window_rule({
+  name  = "omarchy-pip-meet",
+  match = { class = "(google-)?[cC]hrom(e|ium)|[bB]rave-browser|[mM]icrosoft-edge|Vivaldi-stable|helium", title = "^Meet - .+" },
+  opacity = "1.0 1.0",
+  float = true,
+  pin   = true,
+  size  = { 600, 338 },
+  keep_aspect_ratio = true,
+  border_size = 0,
+  move  = { "(monitor_w-window_w-40)", "(monitor_h-window_h-40)" },
+})
+
+------------------
+--- FLOATING ---
+------------------
+
+-- Portal dialogs -- file pickers, screen-share prompts, permission requests --
+-- are never anything but a dialog, whatever the app that asked for one titled
+-- it. Tiled into the layout they shove the window that opened them aside; this
+-- gives them the same centred float Omarchy uses everywhere.
+local floating = {
+  ["omarchy-float-portal"] = { class = "xdg-desktop-portal-gtk" },
+  ["omarchy-float-viewers"] = { class = "imv|mpv|org.gnome.Loupe" },
+  ["omarchy-float-pavucontrol"] = { class = "org.pulseaudio.pavucontrol|pavucontrol" },
+}
+
+for name, match in pairs(floating) do
+  hl.window_rule({
+    name   = name,
+    match  = match,
+    float  = true,
+    center = true,
+    size   = { 875, 600 },
+  })
+end
+
+-- GTK/Qt apps that draw their own file chooser rather than going through the
+-- portal. Matched on the title, because the class is just the app itself.
+hl.window_rule({
+  name  = "omarchy-float-file-dialogs",
+  match = {
+    class = "(sublime_text|DesktopEditors|org.gnome.Nautilus|dolphin|org.kde.dolphin)",
+    title = "^(Open.*Files?|Open [F|f]older.*|Save.*Files?|Save.*As|Save|All Files|.*wants to [open|save].*|[C|c]hoose.*)",
+  },
+  float  = true,
+  center = true,
+  size   = { 875, 600 },
+})
+
+---------------------
+--- IDLE INHIBIT ---
+---------------------
+
+-- hypridle locks at 10 minutes and blanks at 15, counting keyboard and mouse
+-- only -- so a film or a controller-only game gets the lock screen dropped on
+-- it mid-scene. These windows hold it off while they are on screen.
+hl.window_rule({
+  name  = "omarchy-idle-inhibit-media",
+  match = { class = "mpv|vlc|imv|org.gnome.Loupe|com.github.rafostar.Clapper|firefox|zen|librewolf|(google-)?[cC]hrom(e|ium)" },
+  idle_inhibit = "fullscreen",
+})
+
+hl.window_rule({
+  name  = "omarchy-idle-inhibit-games",
+  match = { class = "steam_app_.*|gamescope|.*\\.exe" },
+  idle_inhibit = "always",
+})
+
+-- Steam's own window: floating (its dialogs tile badly), and inhibiting only
+-- when Big Picture is fullscreen.
+hl.window_rule({
+  name  = "omarchy-steam",
+  match = { class = "steam" },
+  float = true,
+  idle_inhibit = "fullscreen",
+})
+
+hl.window_rule({
+  name  = "omarchy-steam-main",
+  match = { class = "steam", title = "Steam" },
+  center = true,
+  size   = { 1100, 700 },
+})
+
+hl.window_rule({
+  name  = "omarchy-steam-friends",
+  match = { class = "steam", title = "Friends List" },
+  size  = { 460, 800 },
+})
+
+--------------------
+--- LAYER RULES ---
+--------------------
+
+-- slurp draws its region picker as a layer named "selection". Animating it puts
+-- a fade and a 1px frame on the thing you are trying to aim with.
+hl.layer_rule({
+  match     = { namespace = "selection" },
+  no_anim   = true,
+  animation = "none",
 })
 
 -------------

@@ -56,6 +56,12 @@ end
 hl.bind("ALT + TAB",         hl.dsp.window.cycle_next(),                { description = "Next window" })
 hl.bind("ALT + SHIFT + TAB", hl.dsp.window.cycle_next({ next = false }), { description = "Previous window" })
 
+-- Cycling only moves focus, which does nothing visible when the window you
+-- landed on is a floating one sitting under another. Hyprland runs duplicate
+-- binds additively, so a second bind on the same key raises it as well.
+hl.bind("ALT + TAB",         hl.dsp.window.bring_to_top(), { description = "Raise focused window" })
+hl.bind("ALT + SHIFT + TAB", hl.dsp.window.bring_to_top(), { description = "Raise focused window" })
+
 -- Grouping (tabbed windows).
 hl.bind("SUPER + G",       hl.dsp.group.toggle(),                    { description = "Toggle grouping" })
 hl.bind("SUPER + ALT + G", hl.dsp.window.move({ out_of_group = true }), { description = "Move out of group" })
@@ -137,6 +143,66 @@ hl.bind("SUPER + comma",         hl.dsp.exec_cmd("makoctl dismiss"),           {
 hl.bind("SUPER + SHIFT + comma", hl.dsp.exec_cmd("makoctl dismiss --all"),     { description = "Dismiss all notifications" })
 hl.bind("SUPER + ALT + comma",   hl.dsp.exec_cmd("makoctl invoke"),            { description = "Invoke last notification" })
 hl.bind("SUPER + CTRL + comma",  hl.dsp.exec_cmd("makoctl mode -t do-not-disturb"), { description = "Toggle do-not-disturb" })
+
+-- Layout toggles. Omarchy drives these through omarchy-hyprland-*-toggle
+-- scripts that keep their state in a file under ~/.local/state; there is no
+-- runtime here, so they are plain Lua closures instead. State lives for as long
+-- as the config does -- a `hyprctl reload` re-runs this file and puts both back
+-- to the defaults below.
+
+-- A single window stretched across 3440px is a 3440px-wide text editor. This
+-- constrains a lone window on a workspace to a square, leaving the rest as
+-- margin.
+--
+-- Off by default because the setting is global and there is no way to exempt a
+-- workspace from it: with it on, the Quake console in omarchy-qconsole.lua is
+-- the only window on its workspace too, so it comes up as a 707x707 square
+-- instead of a full-width drop-down. Toggle it on for a session of editing and
+-- back off before reaching for the console, or set this to true and accept the
+-- square console.
+local square_single_window = false
+
+local function apply_single_window_aspect_ratio()
+  hl.config({
+    layout = {
+      -- {0, 0} is the "unset" value Hyprland ships, meaning use the full width.
+      single_window_aspect_ratio = square_single_window and { 1, 1 } or { 0, 0 },
+    },
+  })
+end
+
+apply_single_window_aspect_ratio()
+
+hl.bind("SUPER + CTRL + BACKSPACE", function()
+  square_single_window = not square_single_window
+  apply_single_window_aspect_ratio()
+end, { description = "Toggle square single-window aspect" })
+
+-- Gaps and borders off, for a screen share or a video call where every pixel of
+-- the shared window counts. The restore values are the ones in
+-- omarchy-looknfeel.lua -- change them there and change them here.
+local gaps_hidden = false
+
+hl.bind("SUPER + SHIFT + BACKSPACE", function()
+  gaps_hidden = not gaps_hidden
+  hl.config({
+    general = {
+      gaps_in     = gaps_hidden and 0 or 5,
+      gaps_out    = gaps_hidden and 0 or 10,
+      border_size = gaps_hidden and 0 or 2,
+    },
+  })
+end, { description = "Toggle window gaps" })
+
+-- Cursor zoom, for reading small text on a large screen. CTRL + SHIFT + Z
+-- steps back down; the reset avoids having to count presses back.
+hl.bind("SUPER + CTRL + Z", function()
+  hl.config({ cursor = { zoom_factor = (hl.get_config("cursor.zoom_factor") or 1) + 1 } })
+end, { description = "Zoom in" })
+
+hl.bind("SUPER + CTRL + SHIFT + Z", function()
+  hl.config({ cursor = { zoom_factor = math.max(1, (hl.get_config("cursor.zoom_factor") or 1) - 1) } })
+end, { description = "Zoom out" })
 
 hl.bind("SUPER + CTRL + L", hl.dsp.exec_cmd("hyprlock"),                { description = "Lock" })
 hl.bind("SUPER + CTRL + T", hl.dsp.exec_cmd(terminal .. " -e btop"),    { description = "Activity monitor" })
