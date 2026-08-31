@@ -587,6 +587,13 @@ Omarchy's bar carries panels for these; those are Quickshell components and are
 not here. Waybar covers the same ground with three modules, and **each one hides
 itself when its backing tool is missing**, so none of them is a hard dependency.
 
+There is also a **launcher button** at the far left, where Omarchy puts the one
+that opens its menu. It is a `custom/menu` module and it opens walker — the same
+thing `SUPER + SPACE` does, and walker's own `close_when_open` makes a second
+click dismiss it. The glyph is a generic apps grid, not Omarchy's logo: this repo
+is not affiliated with Omarchy and should not ship its mark. Swap it for anything
+your Nerd Font has.
+
 **Bluetooth** is built into waybar — it speaks to bluez over D-Bus, so `bluez`
 and `bluez-utils` (already needed for the adapter) are the whole requirement. It
 shows the connected device count and enumerates paired devices in the tooltip.
@@ -636,6 +643,12 @@ cached, so a diagnostic can never reach the bar again.
 Not every monitor answers DDC/CI, and some need it enabled in their OSD first.
 `ddcutil detect` is the test — if it finds nothing, the module simply does not
 appear.
+
+**If a module is blank rather than absent**, check that `~/.local/bin` is on the
+`PATH` the session gives waybar — it runs `hypr-brightness` and `hypr-tailscale`
+by name, and a display manager does not always source the profile that adds that
+directory. `tr '\0' '\n' < /proc/$(pgrep -x waybar)/environ | grep ^PATH` answers
+it. Failing that, put absolute paths in the module's `exec`.
 
 ---
 
@@ -827,6 +840,8 @@ handler). Drop this section once a fixed waybar release lands.
 ## License
 
 MIT — see [LICENSE](LICENSE). Cherry-picked Omarchy configuration remains
-Copyright © David Heinemeier Hansson under MIT; the attribution and trademark
-notes live in [NOTICE](NOTICE), which keeps `LICENSE` byte-for-byte standard so
-GitHub detects it as MIT rather than "Other".
+Copyright © David Heinemeier Hansson under MIT, and `hypr/hyprland.lua` began as
+Hyprland's own example config, Copyright © vaxerski under BSD 3-Clause. Both
+notices, the list of which files are derived from what, and the trademark note
+live in [NOTICE](NOTICE) — which keeps `LICENSE` byte-for-byte standard so GitHub
+detects it as MIT rather than "Other".

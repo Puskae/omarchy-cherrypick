@@ -59,8 +59,11 @@ hl.bind("ALT + SHIFT + TAB", hl.dsp.window.cycle_next({ next = false }), { descr
 -- Cycling only moves focus, which does nothing visible when the window you
 -- landed on is a floating one sitting under another. Hyprland runs duplicate
 -- binds additively, so a second bind on the same key raises it as well.
-hl.bind("ALT + TAB",         hl.dsp.window.bring_to_top(), { description = "Raise focused window" })
-hl.bind("ALT + SHIFT + TAB", hl.dsp.window.bring_to_top(), { description = "Raise focused window" })
+--
+-- Deliberately undescribed: hypr-cheatsheet lists one line per described bind,
+-- and these are the same user-facing action as the two above, not another one.
+hl.bind("ALT + TAB",         hl.dsp.window.bring_to_top())
+hl.bind("ALT + SHIFT + TAB", hl.dsp.window.bring_to_top())
 
 -- Grouping (tabbed windows).
 hl.bind("SUPER + G",       hl.dsp.group.toggle(),                    { description = "Toggle grouping" })

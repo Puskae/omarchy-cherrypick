@@ -5,13 +5,78 @@ detection recognises it. The notes below sat inside that file previously; they
 are informational and do not add terms to it.
 
 
-DERIVED WORK
+=======================================================================
+DERIVED WORK -- OMARCHY (MIT)
+=======================================================================
 
 Portions of the Hyprland configuration in this repository are derived from
 Omarchy, Copyright (c) David Heinemeier Hansson, also under the MIT License.
+The permission notice in LICENSE is the MIT notice retained for those portions.
+
+Derived files, each carrying a comment naming its upstream source:
+
+  hypr/omarchy-bindings.lua   <- default/hypr/bindings/*.lua
+  hypr/omarchy-looknfeel.lua  <- default/hypr/looknfeel.lua
+  hypr/omarchy-windows.lua    <- default/hypr/windows.lua, default/hypr/apps/*.lua
+  hypr/omarchy-qconsole.lua   <- default/hypr/qconsole.lua
+
+These are translations from Omarchy's own o.bind() / o.window() helpers to the
+stock Hyprland Lua API, and some of Omarchy's comments are kept verbatim.
+
+Omarchy's themes and templates are NOT redistributed here. The README's install
+steps fetch them from Omarchy directly.
+
+Everything else is original to this repository: bin/*, config/waybar/*,
+config/walker/*, config/gamemode.ini, config/MangoHud.conf, hypr/hypridle.conf
+and hypr/hyprlock.conf. The waybar configuration is an interpretation of
+Omarchy's look, not a copy of an upstream file -- Omarchy 4.0 ships herdr rather
+than waybar, and has no walker theme at all.
 
 
+=======================================================================
+DERIVED WORK -- HYPRLAND (BSD 3-Clause)
+=======================================================================
+
+hypr/hyprland.lua began as Hyprland's own example configuration and keeps parts
+of its structure and comments. That file is reproduced under the terms below.
+
+BSD 3-Clause License
+
+Copyright (c) 2022-2026, vaxerski
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+=======================================================================
 TRADEMARK
+=======================================================================
 
 Omarchy is a pending trademark of the Omacom Foundation. This project is not
 affiliated with, endorsed by, or a distribution of Omarchy.
+
+Hyprland and CachyOS are likewise named only to describe what this configuration
+is for. Neither project endorses it.

@@ -34,7 +34,7 @@
   // (Arch) or anything else your Nerd Font has.
   "custom/menu": {
     "format": "󰀻",
-    "tooltip-format": "Launcher  (SUPER + SPACE)",
+    "tooltip-format": "Launcher (SUPER + SPACE)",
     "on-click": "walker"
   },
 
@@ -183,7 +183,7 @@
     "return-type": "json",
     "interval": 30,
     "exec": "hypr-tailscale",
-    "on-click": "alacritty --title tailscale -e sh -c 'hypr-tailscale peers; echo; read -p \"[enter] \"'"
+    "on-click": "alacritty --title tailscale -e sh -c 'hypr-tailscale peers; echo; printf \"[enter] \"; read _'"
   },
 
   "custom/power": {
