@@ -38,6 +38,11 @@ hl.window_rule({
   opacity = "1.0 1.0",
   float = true,
   pin   = true,
+  -- PiP has no keyboard use -- its controls are all mouse -- and Firefox
+  -- re-requests activation whenever the window is retitled. With
+  -- misc.focus_on_activate on, that steals focus mid-typing, so refuse it here
+  -- instead of turning activation off for every application.
+  no_focus = true,
   size  = { 600, 338 },
   keep_aspect_ratio = true,
   border_size = 0,
@@ -52,6 +57,11 @@ hl.window_rule({
   opacity = "1.0 1.0",
   float = true,
   pin   = true,
+  -- PiP has no keyboard use -- its controls are all mouse -- and Firefox
+  -- re-requests activation whenever the window is retitled. With
+  -- misc.focus_on_activate on, that steals focus mid-typing, so refuse it here
+  -- instead of turning activation off for every application.
+  no_focus = true,
   size  = { 600, 338 },
   keep_aspect_ratio = true,
   border_size = 0,

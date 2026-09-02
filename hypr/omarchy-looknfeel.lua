@@ -79,6 +79,12 @@ hl.config({
   cursor = {
     hide_on_key_press       = true,
     warp_on_change_workspace = 1,
+
+    -- Don't teleport the pointer onto whatever just took focus. Hyprland warps
+    -- by default, so a window that activates itself -- a Firefox PiP retitling
+    -- when the video changes, say -- drags the mouse across the ultrawide with
+    -- it. Workspace switches still warp; that one is wanted.
+    no_warps                = true,
   },
 
   binds = {
