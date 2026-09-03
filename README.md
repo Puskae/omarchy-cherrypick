@@ -64,6 +64,33 @@ gallery. No theme files, wallpapers or screenshots of them are stored here;
 
 ---
 
+## TL;DR — install with the script
+
+```sh
+git clone https://github.com/Puskae/omarchy-cherrypick
+cd omarchy-cherrypick
+./install.sh          # --dry-run first, if you'd rather look
+```
+
+**Run it from Plasma, not from Hyprland** — it asks for confirmation if you are in
+one. It does everything under [Install](#install) below: packages, Omarchy's themes,
+configs, scripts. Anything already there is backed up first, and nothing is ever
+deleted.
+
+Then log out, pick **Hyprland** at the login screen, and apply a theme from inside
+that session:
+
+```sh
+omarchy-theme          # list
+omarchy-theme nord     # apply
+```
+
+It prints the three edits it will not make for you at the end — `kb_layout` is the
+one you cannot skip. `--help` lists the rest of the flags; [Removing it](#removing-it)
+covers going back.
+
+---
+
 ## Why this exists
 
 The existing option, [mroboff/omarchy-on-cachyos](https://github.com/mroboff/omarchy-on-cachyos),
@@ -112,6 +139,7 @@ tested — not because it's coupled to it.
 ## What's here
 
 ```
+install.sh               one-pass installer; backs up first, records a manifest
 bin/omarchy-theme        theme switcher; renders Omarchy's templates with no runtime
 bin/llm-vram-release     frees GPU VRAM from Ollama before a game starts
 bin/hypr-cheatsheet      keybinding cheatsheet in a terminal
@@ -1068,6 +1096,111 @@ module (waybar would run it as a shell command and swallow the built-in
 handler). Drop this section once a fixed waybar release lands.
 
 ---
+
+## Removing it
+
+There is no uninstall script, on purpose. What `install.sh` leaves
+instead is a **manifest**, which makes removal exact rather than a guess at which
+files were yours:
+
+```sh
+column -t -s$'\t' ~/.local/share/omarchy-cherrypick/manifest.tsv
+```
+
+> [!NOTE]
+> **The snippets in this section are bash**, and fish has neither `$'\t'` nor
+> `while ... done`. On CachyOS's default shell, wrap each one in
+> `bash -c '...'` — the same wrapper [step 3](#3-configs) uses.
+
+Each row is `kind`, `path`, `detail`. `file` rows carry the sha256 the file had
+when it was written, `backup` rows point at the copy of whatever was there before,
+and `dir` rows list only directories the script itself created — so nothing here
+can ever propose deleting `~/.config`.
+
+**First, see what you have actually changed.** This deletes nothing:
+
+```bash
+while IFS=$'\t' read -r kind path detail; do
+  [ "$kind" = file ] && [ -e "$path" ] || continue
+  if [ "sha256:$(sha256sum "$path" | cut -d' ' -f1)" = "$detail" ]; then
+    echo "unchanged  $path"
+  else
+    echo "EDITED     $path"
+  fi
+done < ~/.local/share/omarchy-cherrypick/manifest.tsv
+```
+
+Anything marked `EDITED` is yours — you changed `kb_layout`, or a keybind, or the
+monitor block. Copy those somewhere before going further.
+
+**Then remove the untouched ones and restore what was displaced.** Order matters:
+delete first, restore second, or a restored backup gets deleted again.
+
+```bash
+M=~/.local/share/omarchy-cherrypick/manifest.tsv
+
+# 1. files this project wrote and you never touched
+while IFS=$'\t' read -r kind path detail; do
+  [ "$kind" = file ] && [ -e "$path" ] || continue
+  [ "sha256:$(sha256sum "$path" | cut -d' ' -f1)" = "$detail" ] && rm -f "$path"
+done < "$M"
+
+# 2. whatever was there before it
+while IFS=$'\t' read -r kind path detail; do
+  [ "$kind" = backup ] && [ -e "$detail" ] || continue
+  cp -a "$detail" "$path"
+done < "$M"
+
+# 3. the mako mask, if the script set it
+grep -q '^masked' "$M" && systemctl --user unmask mako.service
+```
+
+**The generated files are not in the manifest**, because they did not exist at
+install time — `omarchy-theme` writes them later. Remove them by hand:
+
+```sh
+rm -f ~/.config/hypr/theme.lua ~/.config/hypr/hyprpaper.conf \
+      ~/.config/alacritty/omarchy-theme.toml \
+      ~/.config/btop/themes/omarchy.theme \
+      ~/.config/kitty/omarchy-theme.conf \
+      ~/.config/foot/omarchy-theme.ini \
+      ~/.config/walker/themes/omarchy/style.css \
+      ~/.config/swaync/style.css ~/.config/mako/config \
+      ~/.config/nvim/lua/plugins/omarchy-theme.lua \
+      ~/.local/state/omarchy-theme
+rm -rf ~/.local/share/omarchy ~/.local/share/omarchy-cherrypick   # themes, manifest
+```
+
+**Four things nothing above can undo for you**, and the honest reason each is left
+alone:
+
+- **Packages.** They are recorded in the manifest and never removed. `pacman -Rns
+  hyprland` on a machine where Plasma is your fallback is a worse afternoon than
+  leaving a few megabytes installed — and half the list (`libnotify`, `qt6-wayland`,
+  `wl-clipboard`) is shared with things you already run. Read the `packages` rows and
+  remove what you actually want gone.
+- **The Alacritty import.** `install.sh` appended a `[general]` block to
+  `alacritty.toml`; that file is yours and may have been edited since, so deleting a
+  block out of it blind is not something a script should do. Remove the two lines
+  naming `omarchy-theme.toml`.
+- **`btop.conf`.** `omarchy-theme` rewrote its `color_theme` line in place rather
+  than adding a file. Point it back at `Default`.
+- **`walker/config.toml`.** One line names the `omarchy` theme. If the file was
+  created by `omarchy-theme` (copied from walker's stock config) you can delete it
+  outright; if it was yours, change that line back.
+
+**And the blunt version**, if you never had a Hyprland setup to preserve and just
+want it gone:
+
+```sh
+rm -rf ~/.config/hypr ~/.config/waybar ~/.config/walker ~/.config/swaync ~/.config/mako
+rm -f  ~/.config/gamemode.ini ~/.config/MangoHud/MangoHud.conf
+rm -f  ~/.local/bin/{omarchy-theme,llm-vram-release,hypr-cheatsheet,hypr-record,hypr-brightness,hypr-tailscale}
+```
+
+Log out of Hyprland first. None of this touches Plasma, which is the whole reason
+the install was additive to begin with — your way back in never depended on any of
+these files.
 
 ## Working on this
 
