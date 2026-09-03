@@ -19,6 +19,7 @@
     "bluetooth",
     "network",
     "custom/tailscale",
+    "custom/notification",
     "cpu",
     "memory",
     "custom/power"
@@ -184,6 +185,36 @@
     "interval": 30,
     "exec": "hypr-tailscale",
     "on-click": "alacritty --title tailscale -e sh -c 'hypr-tailscale peers; echo; printf \"[enter] \"; read _'"
+  },
+
+  // swaync's own waybar recipe: -swb streams a JSON line on every add/close,
+  // so this module is event-driven and has no interval to poll on. "alt" is
+  // the state name -- notification / none / dnd-* / inhibited-* -- which both
+  // picks the glyph below and lands in the CSS class.
+  //
+  // The count sits in the tooltip rather than the label: swaync sends "0" when
+  // nothing is waiting, and a bar that permanently reads "0" is noise.
+  "custom/notification": {
+    "format": "{icon}",
+    "return-type": "json",
+    "exec": "swaync-client -swb",
+    "escape": true,
+    "tooltip": true,
+    "format-icons": {
+      "notification": "󰂚",
+      "none": "󰂚",
+      "dnd-notification": "󰂛",
+      "dnd-none": "󰂛",
+      "inhibited-notification": "󰂚",
+      "inhibited-none": "󰂚",
+      "dnd-inhibited-notification": "󰂛",
+      "dnd-inhibited-none": "󰂛"
+    },
+    // -sw ("skip wait") everywhere: without it swaync-client blocks waiting for
+    // a daemon that may not be running, and the click appears to do nothing.
+    "on-click": "swaync-client -t -sw",
+    "on-click-right": "swaync-client -d -sw",
+    "on-click-middle": "swaync-client -C -sw"
   },
 
   "custom/power": {

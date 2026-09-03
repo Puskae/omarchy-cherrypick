@@ -61,7 +61,11 @@ hl.on("hyprland.start", function()
   -- nothing activates that target in a plain, non-uwsm Hyprland session.
   hl.exec_cmd("/usr/lib/hyprpolkitagent/hyprpolkitagent")  -- GUI auth prompts
   hl.exec_cmd("hyprpaper")  -- wallpaper
-  hl.exec_cmd("mako")       -- notifications
+  -- Notification daemon. swaync rather than mako for the control centre: a
+  -- panel that lists what you missed and keeps each notification's action
+  -- buttons live. mako is still shipped as a fallback -- swap this one line
+  -- back to hl.exec_cmd("mako") and its config is already there.
+  hl.exec_cmd("swaync")     -- notifications
   hl.exec_cmd("waybar")     -- status bar
   hl.exec_cmd("hypridle")   -- idle -> lock
 

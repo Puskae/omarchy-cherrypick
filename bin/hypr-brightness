@@ -41,6 +41,15 @@ set -euo pipefail
 STEP=5
 WAYBAR_SIGNAL=8   # matches "signal" on custom/brightness in the waybar config
 
+# Never go darker than this. A slider can reach 0, and a monitor at 0 is a black
+# screen you then cannot see well enough to undo it. The floor lives here rather
+# than in the caller because swaync's slider widget clamps by calling set_value()
+# from inside its own value_changed handler, which resets GTK's drag gesture
+# mid-drag: with a min_limit set, the handle stops following the pointer after
+# the first clamp and the slider is stuck for good. So the widget is given the
+# full 0-100 range and this is the thing that refuses to go too dark.
+FLOOR=5
+
 # The caches are meaningless across a reboot, and the bus number can change when
 # a monitor is replugged, so the runtime dir is the right home for them.
 cache_dir="${XDG_RUNTIME_DIR:-/tmp}"
@@ -153,9 +162,11 @@ case "${1:-get}" in
   up)    nudge "${2:-$STEP}" ;;
   down)  nudge "-${2:-$STEP}" ;;
   set)   valid "${2:-}" || die "usage: hypr-brightness set <0-100>"
-         printf '%s' "$2" > "$value_cache"
+         value=$2
+         (( value < FLOOR )) && value=$FLOOR
+         printf '%s' "$value" > "$value_cache"
          pkill -RTMIN+$WAYBAR_SIGNAL waybar 2>/dev/null || true
-         printf '%s\n' "$2"
+         printf '%s\n' "$value"
          flush ;;
   sync)  rm -f "$value_cache" "$bus_cache"
          current; echo

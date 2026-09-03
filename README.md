@@ -122,6 +122,8 @@ hypr/                    the Lua config set (hyprland.lua + 4 modules),
                          plus hypridle.conf and hyprlock.conf
 config/waybar/           bar config + stylesheet + a fallback colors.css
 config/walker/           launcher stylesheet template, rendered per theme
+config/swaync/           notification centre config + stylesheet template
+config/mako/             mako config template, kept as the lighter fallback
 config/gamemode.ini      gamemode hooks
 config/MangoHud.conf     hidden-by-default overlay (hyprland.lua sets MANGOHUD=1)
 ```
@@ -199,13 +201,15 @@ From the repos:
 sudo pacman -S --needed \
   hyprland hyprpaper hypridle hyprlock hyprpicker hyprpolkitagent \
   xdg-desktop-portal-hyprland qt6-wayland \
-  waybar mako alacritty ttf-meslo-nerd \
+  waybar swaync alacritty ttf-meslo-nerd \
   grim slurp wl-clipboard playerctl pavucontrol \
   wlogout wf-recorder libnotify xdg-user-dirs
 ```
 
 `libnotify` and `xdg-user-dirs` are usually already pulled in by Plasma; they're
-listed because `bin/` uses `notify-send` and `xdg-user-dir` directly.
+listed because `bin/` uses `notify-send` and `xdg-user-dir` directly. `swaync` is
+the notification daemon — add `mako` too if you'd rather run the
+[lighter fallback](#notifications).
 `ttf-meslo-nerd` supplies **MesloLGM Nerd Font**, which `hyprlock.conf` and the
 waybar stylesheet both name — without it the lock screen clock and the bar's
 glyphs fall back to whatever fontconfig picks, silently and badly.
@@ -320,8 +324,10 @@ mkdir -p ~/.config/hypr ~/.config/waybar ~/.config/MangoHud ~/.local/bin
 
 cp hypr/*              ~/.config/hypr/
 cp config/waybar/*     ~/.config/waybar/
-mkdir -p ~/.config/walker/themes/omarchy
+mkdir -p ~/.config/walker/themes/omarchy ~/.config/swaync ~/.config/mako
 cp config/walker/style.css.tpl ~/.config/walker/themes/omarchy/
+cp config/swaync/*             ~/.config/swaync/
+cp config/mako/config.tpl      ~/.config/mako/
 cp config/MangoHud.conf ~/.config/MangoHud/
 cp config/gamemode.ini ~/.config/
 cp bin/*               ~/.local/bin/
@@ -456,7 +462,7 @@ hl.on("hyprland.start", function()
   hl.exec_cmd("dbus-update-activation-environment --systemd --all")
   hl.exec_cmd("/usr/lib/hyprpolkitagent/hyprpolkitagent")
   hl.exec_cmd("hyprpaper")
-  hl.exec_cmd("mako")
+  hl.exec_cmd("swaync")
   hl.exec_cmd("waybar")
   hl.exec_cmd("hypridle")
   ...
@@ -587,6 +593,9 @@ Omarchy's bar carries panels for these; those are Quickshell components and are
 not here. Waybar covers the same ground with three modules, and **each one hides
 itself when its backing tool is missing**, so none of them is a hard dependency.
 
+A fourth, `custom/notification`, is documented with the daemon it belongs to
+under [Notifications](#notifications).
+
 There is also a **launcher button** at the far left, where Omarchy puts the one
 that opens its menu. It is a `custom/menu` module and it opens walker — the same
 thing `SUPER + SPACE` does, and walker's own `close_when_open` makes a second
@@ -664,7 +673,7 @@ core of it is about fifty lines. The script is ~380 because the rest is per-app 
 guards, palette fallbacks for keys not every theme defines, and reloading each app
 in place afterwards.
 
-This script renders **nine** outputs:
+This script renders **eleven** outputs:
 
 | Output | Path | Notes |
 |---|---|---|
@@ -677,6 +686,8 @@ This script renders **nine** outputs:
 | kitty            | `~/.config/kitty/omarchy-theme.conf` | `include` it yourself |
 | foot             | `~/.config/foot/omarchy-theme.ini` | `include` it yourself |
 | walker           | `~/.config/walker/themes/omarchy/style.css` | walker restarted |
+| swaync           | `~/.config/swaync/style.css` | `swaync-client --reload-css` |
+| mako             | `~/.config/mako/config` | `makoctl reload` |
 
 Each app is **skipped unless its binary is on `PATH`**, so the script is safe on a
 minimal system — and it does not skip a freshly installed app that has not created
@@ -686,13 +697,26 @@ emit a LazyVim plugin spec — without it you'd get a file nothing reads. 15 of 
 22 themes ship a hand-picked colorscheme (nord uses nordfox); the rest fall back
 to the palette-driven `aether` template.
 
-**walker is the one output with no Omarchy template behind it.** Omarchy ships no
+**walker, swaync and mako are the outputs with no Omarchy template behind them.** Omarchy ships no
 walker theme, because its launcher is a Quickshell component rather than walker
 (see [What Omarchy has that this doesn't](#what-omarchy-has-that-this-doesnt)), so
 `config/walker/style.css.tpl` is this repo's own — an interpretation of Omarchy's
 flat, square look driven by the same six palette keys every theme defines. It is
 installed *into* the generated theme directory and rendered to `style.css` beside
 itself, so the template travels with the theme it produces.
+
+Notifications are the same idea, and for the same reason — Omarchy's are a
+Quickshell component too. The two daemons want opposite treatment, though:
+
+- **swaync** loads `/etc/xdg/swaync/style.css` and *then* `~/.config/swaync/style.css`
+  on top of it, so `config/swaync/style.css.tpl` only redefines the `:root` colour
+  variables. The 500+ layout rules stay upstream's and track your installed
+  version instead of a fork. Its `config.json` isn't generated at all — nothing in
+  it is a colour, so it's copied in once at install and left alone.
+- **mako** has no layering: `config/mako/config.tpl` renders the **whole** config.
+  A colours-only fragment would have to be pulled in with mako's `include`, and a
+  missing include is fatal — mako refuses to start on it, and a notification daemon
+  that never came up looks like nothing at all rather than like an error.
 
 A walker theme is layout XML plus a stylesheet. Only the stylesheet is generated;
 the XML is copied once from the installed walker's own stock theme
@@ -702,7 +726,9 @@ walker version instead of a pinned copy. `~/.config/walker/config.toml` gets its
 have no config of your own, and otherwise left alone apart from that one line.
 
 It then reloads each app in place — `hyprctl reload`, `pkill -USR2 waybar`, and a
-hyprpaper restart (it only re-reads its config on start). walker reads its theme at
+hyprpaper restart (it only re-reads its config on start), plus
+`swaync-client --reload-css` and `makoctl reload`, both of which re-read in place
+without dropping notification history. walker reads its theme at
 startup too, so its `--gapplication-service` daemon is restarted — but only if one
 was already running, so this never leaves a stray daemon on a machine that does not
 autostart it. btop and Neovim have no reload signal, so those two are reported
@@ -725,6 +751,173 @@ Two behaviours to know:
 
 ---
 
+## Notifications
+
+**swaync** (SwayNotificationCenter), autostarted from `hyprland.lua`, popups
+anchored top-right. The reason it's swaync and not mako is the **control centre**:
+`SUPER + N` slides out a panel listing everything that arrived, scrollable, with
+each notification's own action buttons still live and a per-item dismiss. mako has
+no surface of its own — only the popups — so with it, history can be read
+(`makoctl history`) but not acted on.
+
+### What's in the panel
+
+swaync's control centre takes an ordered list of **widgets** in
+`config/swaync/config.json` — that's its extension point, and 0.12.6 ships eleven
+types. Six are enabled here, and three of them are doing real work rather than
+decorating:
+
+| Widget | Why |
+|---|---|
+| `notifications` | the list itself |
+| `title`, `dnd` | header with Clear-all, and the DND switch |
+| `mpris` | transport + album art — the bar's `custom/media` shows the track but can't control it |
+| `volume` | sinks **plus per-app sliders**, which is most of what pavucontrol gets opened for |
+| `inhibitors` | what is currently suppressing notifications, with a Clear button |
+
+**Brightness is a `buttons-grid`, not a slider — and that is not a preference.**
+Two of swaync's widgets could plausibly do it, and both are out:
+
+- The **`backlight`** widget reads `/sys/class/backlight`, which a desktop does
+  not have. That absence is the entire reason `bin/hypr-brightness` exists.
+- The generic **`slider`** widget takes `cmd_getter`/`cmd_setter`, which looks
+  like an exact fit — `hypr-brightness get` / `hypr-brightness set $value` — but
+  **its drag gesture does not work.** Grab the handle and the value pins to the
+  range minimum and never moves again; the handle still takes `:active` styling,
+  so it looks alive.
+
+The cause is in `slider.vala`, and it is worth knowing because the widget looks
+fine on paper:
+
+```vala
+slider.value_changed.connect (() => {
+    ...
+    slider.set_value (value);   // ← writes back into the widget being dragged
+```
+
+It calls `set_value()` unconditionally from inside its own `value_changed`
+handler, which cancels the in-flight GTK drag gesture. The `volume` widget's
+handler never writes back — it only reads `slider.get_value ()` — which is why
+that one drags perfectly under identical CSS. Verified on 0.12.6 by swapping the
+setter for an instant log-only script (a whole drag produced exactly **one**
+`value_changed`) and by stripping every custom CSS rule (no change). The file is
+byte-identical on upstream `main`, so this is not fixed in a newer release.
+
+So the panel gets five buttons instead — 20% / 50% / 80% presets and ±5% — each
+calling `bin/hypr-brightness`, which needs no gesture and reuses the same
+write-coalescing the bar module relies on. **If you have no DDC-capable monitor
+or no `ddcutil`, drop the `buttons-grid#brightness` widget** (or use `backlight`
+on a laptop, where it works).
+
+Two theming traps here, both of which look like the widget is broken rather than
+the stylesheet:
+
+- swaync's own sheet styles `.per-app-volume` with `var(--noti-bg-alt)` and
+  **never defines that variable**, so per-app rows render with no background at
+  all. The template defines it.
+- **Never set `min-width`/`min-height` on `scale slider`.** Adwaita gives the
+  handle a negative margin, so a small min size computes negative — GTK warns
+  `reported min height -6, but sizes must be >= 0` — and the handle ends up with
+  no hit area. Size the `scale` instead and only colour the handle.
+
+### Bar module
+
+`custom/notification` in waybar is swaync's own recipe rather than a script of
+this repo's: `swaync-client -swb` streams a JSON line on every add and close, so
+the module is event-driven with no polling interval. The state name lands in the
+CSS class, which is what colours the glyph:
+
+| State | Glyph | Colour |
+|---|---|---|
+| nothing waiting | 󰂚 | `@fg` |
+| notifications waiting | 󰂚 | `@accent` |
+| do-not-disturb | 󰂛 | `@muted` |
+
+The count is in the tooltip rather than the label — swaync sends `"0"` when
+nothing is waiting, and a bar that permanently reads `0` is noise. Left-click
+toggles the panel, right-click toggles DND, middle-click clears everything.
+
+### Bindings
+
+Every one of them passes `-sw` ("skip wait"): without it `swaync-client` blocks
+waiting for a daemon that may not be running, so a bind hangs instead of failing.
+
+| Bind | Action |
+|---|---|
+| `SUPER + N` | Toggle the notification centre |
+| `SUPER + ,` | Dismiss the latest notification |
+| `SUPER + SHIFT + ,` | Dismiss all |
+| `SUPER + ALT + ,` | Invoke the latest notification's first action |
+| `SUPER + CTRL + ,` | Toggle do-not-disturb |
+
+### Timeouts
+
+`timeout: 5`, `timeout-low: 5`, `timeout-critical: 0` — ordinary popups clear
+themselves after 5s and critical ones stay until acknowledged. This only governs
+the **popup**; everything lands in the control centre either way, which is the
+practical difference from a plain daemon.
+
+Popups sit on the `top` layer, not `overlay`, so they stay under a fullscreen
+window rather than painting over a game. The control centre is `overlay` — you
+only ever open it deliberately.
+
+### Silence while gaming
+
+`config/gamemode.ini` adds a named **inhibitor** when a game starts and removes it
+when the game exits, so nothing pops up over a fullscreen game and everything is
+still waiting in the panel afterwards:
+
+```ini
+start=/home/yourusername/.local/bin/llm-vram-release
+    swaync-client -Ia gamemode -sw
+end=swaync-client -Ir gamemode -sw
+```
+
+Two things make that work. gamemode runs `[custom]` hooks **through the shell**
+and takes more than one command per hook as indented continuation lines — the
+format is in the `[custom]` example in `gamemoded(8)`. And swaync's inhibitors are
+**named**, so this can't desynchronise the way a do-not-disturb toggle would: the
+end hook removes that exact inhibitor and leaves any other alone, and a game that
+dies without running its end hook leaves one visible entry in the panel with a
+Clear button rather than a silently muted desktop.
+
+`end=` used to be `/bin/true` — there was nothing to undo, since Ollama reloads a
+model on the next request by itself. Now it has a job.
+
+Verify the whole thing without launching a game:
+
+```sh
+gamemoded -t
+```
+
+which runs both start scripts and the end script and reports each one.
+
+### Falling back to mako
+
+mako is still shipped, config and theme template both. It's a ~1 MB C daemon
+against swaync's GTK4 one, and if the panel turns out to be something you never
+open, it's the better trade. Swap one line in `hyprland.lua`:
+
+```lua
+hl.exec_cmd("mako")       -- instead of swaync
+```
+
+then `pacman -S mako`, re-point the four `comma` binds at `makoctl`
+(`dismiss` / `dismiss --all` / `invoke` / `mode -t do-not-disturb`), drop the two
+`swaync-client` lines from `config/gamemode.ini`, and drop the
+`custom/notification` module from the bar — `makoctl` has no `-swb` equivalent, so
+that module goes back to being a script you'd have to write.
+
+One thing mako gets wrong by default, worth knowing if you do go back:
+**`default-timeout` is `0` upstream**, meaning notifications never expire.
+Anything from plain `notify-send` — including `bin/llm-vram-release` and
+`bin/hypr-record` — then sits in the corner forever. `config/mako/config.tpl`
+sets 5s, and defines the `[mode=do-not-disturb]` section that the DND bind
+toggles; `makoctl mode -t` will happily toggle a mode no criteria section
+defines, changing nothing at all.
+
+---
+
 ## Gaming: Ollama and VRAM
 
 Not Omarchy-related, but it belongs with an AMD desktop that also runs local models.
@@ -737,6 +930,9 @@ Ollama keeps a model in VRAM for `OLLAMA_KEEP_ALIVE` (5 min default) after the l
 request. `config/gamemode.ini` runs `bin/llm-vram-release` on game start, which
 `ollama stop`s everything in `ollama ps`. There's no cleanup hook — the daemon
 reloads on the next request by itself.
+
+The same hook also silences notifications for the duration of the game — see
+[Silence while gaming](#silence-while-gaming).
 
 Governor and renice are deliberately **off** in that config: amd-pstate-epp already
 boosts under `powersave`, and renice/softrealtime lack the privileges gamemode has

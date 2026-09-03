@@ -29,6 +29,7 @@ window#waybar {
 #custom-menu,
 #custom-brightness,
 #custom-tailscale,
+#custom-notification,
 #bluetooth,
 #custom-power,
 #tray {
@@ -132,6 +133,27 @@ window#waybar {
 }
 
 #custom-tailscale.down {
+  color: @muted;
+}
+
+/* Notifications. The glyph is quiet when there is nothing waiting and takes
+   the accent when there is -- swaync puts the state in the class, so no script
+   of ours is involved. DND is muted rather than red: it is a deliberate state,
+   not a fault. */
+#custom-notification.none,
+#custom-notification.inhibited-none {
+  color: @fg;
+}
+
+#custom-notification.notification,
+#custom-notification.inhibited-notification {
+  color: @accent;
+}
+
+#custom-notification.dnd-none,
+#custom-notification.dnd-notification,
+#custom-notification.dnd-inhibited-none,
+#custom-notification.dnd-inhibited-notification {
   color: @muted;
 }
 

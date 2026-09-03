@@ -37,7 +37,9 @@ hl.bind("SUPER + SPACE",          hl.dsp.exec_cmd(launcher), { description = "La
 --- WINDOWS ---
 ---------------
 
-hl.bind("SUPER + W", hl.dsp.window.close(), { description = "Close window" })
+-- Omarchy binds close to both SUPER + W and SUPER + Q. Only Q is kept here:
+-- W sits next to the movement keys and gets hit by accident constantly, and
+-- an accidental close is not undoable. Re-add it if you want the pair back.
 hl.bind("SUPER + Q", hl.dsp.window.close(), { description = "Close window" })
 
 hl.bind("SUPER + J",       hl.dsp.layout("togglesplit"),                        { description = "Toggle split" })
@@ -141,11 +143,17 @@ hl.bind("PRINT",         hl.dsp.exec_cmd([[grim -g "$(slurp)" - | wl-copy]]),   
 hl.bind("SHIFT + PRINT", hl.dsp.exec_cmd("grim - | wl-copy"),                                                              { description = "Screenshot screen to clipboard" })
 hl.bind("SUPER + PRINT", hl.dsp.exec_cmd([[d=$(xdg-user-dir PICTURES 2>/dev/null || echo "$HOME/Pictures"); mkdir -p "$d" && grim -g "$(slurp)" "$d/$(date +%Y%m%d-%H%M%S).png"]]), { description = "Screenshot region to file" })
 
--- makoctl in place of omarchy-shell notifications.
-hl.bind("SUPER + comma",         hl.dsp.exec_cmd("makoctl dismiss"),           { description = "Dismiss notification" })
-hl.bind("SUPER + SHIFT + comma", hl.dsp.exec_cmd("makoctl dismiss --all"),     { description = "Dismiss all notifications" })
-hl.bind("SUPER + ALT + comma",   hl.dsp.exec_cmd("makoctl invoke"),            { description = "Invoke last notification" })
-hl.bind("SUPER + CTRL + comma",  hl.dsp.exec_cmd("makoctl mode -t do-not-disturb"), { description = "Toggle do-not-disturb" })
+-- swaync-client in place of omarchy-shell notifications. -sw ("skip wait") on
+-- every one of them: without it swaync-client blocks waiting for a daemon that
+-- may not be running, and the bind hangs instead of failing.
+--
+-- SUPER + N is the one worth remembering -- it opens the control centre, which
+-- is the whole reason this is swaync and not mako.
+hl.bind("SUPER + N",             hl.dsp.exec_cmd("swaync-client -t -sw"),             { description = "Notification centre" })
+hl.bind("SUPER + comma",         hl.dsp.exec_cmd("swaync-client --close-latest -sw"), { description = "Dismiss notification" })
+hl.bind("SUPER + SHIFT + comma", hl.dsp.exec_cmd("swaync-client -C -sw"),             { description = "Dismiss all notifications" })
+hl.bind("SUPER + ALT + comma",   hl.dsp.exec_cmd("swaync-client -a 0 -sw"),           { description = "Invoke last notification" })
+hl.bind("SUPER + CTRL + comma",  hl.dsp.exec_cmd("swaync-client -d -sw"),             { description = "Toggle do-not-disturb" })
 
 -- Layout toggles. Omarchy drives these through omarchy-hyprland-*-toggle
 -- scripts that keep their state in a file under ~/.local/state; there is no

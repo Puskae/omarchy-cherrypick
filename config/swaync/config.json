@@ -1,0 +1,88 @@
+{
+  "$schema": "/etc/xdg/swaync/configSchema.json",
+
+  "positionX": "right",
+  "positionY": "top",
+
+  "layer": "top",
+  "control-center-layer": "overlay",
+  "layer-shell": true,
+  "layer-shell-cover-screen": false,
+
+  "cssPriority": "user",
+  "ignore-gtk-theme": true,
+
+  "control-center-width": 440,
+  "control-center-height": 620,
+  "control-center-margin-top": 8,
+  "control-center-margin-right": 8,
+  "control-center-margin-bottom": 8,
+  "control-center-margin-left": 0,
+  "notification-window-width": 400,
+
+  "timeout": 5,
+  "timeout-low": 5,
+  "timeout-critical": 0,
+
+  "fit-to-screen": true,
+  "relative-timestamps": true,
+  "notification-grouping": true,
+  "notification-2fa-action": true,
+  "notification-inline-replies": true,
+  "notification-body-image-height": 100,
+  "notification-body-image-width": 200,
+  "image-visibility": "when-available",
+  "keyboard-shortcuts": true,
+  "transition-time": 200,
+  "hide-on-clear": false,
+  "hide-on-action": true,
+  "text-empty": "Nothing to see",
+  "script-fail-notify": true,
+
+  "widgets": ["inhibitors", "title", "dnd", "mpris", "volume", "buttons-grid#brightness", "notifications"],
+
+  "widget-config": {
+    "inhibitors": {
+      "text": "Inhibited",
+      "clear-all-button": true,
+      "button-text": "Clear"
+    },
+    "title": {
+      "text": "Notifications",
+      "clear-all-button": true,
+      "button-text": "Clear all"
+    },
+    "dnd": {
+      "text": "Do not disturb"
+    },
+    "volume": {
+      "label": "Volume",
+      "show-per-app": true,
+      "show-per-app-icon": true,
+      "show-per-app-label": true,
+      "expand-per-app": false,
+      "empty-list-label": "Nothing playing",
+      "expand-button-label": "",
+      "collapse-button-label": ""
+    },
+    "buttons-grid#brightness": {
+      "buttons-per-row": 5,
+      "actions": [
+        { "label": "󰃞", "type": "normal", "command": "hypr-brightness set 20" },
+        { "label": "󰃟", "type": "normal", "command": "hypr-brightness set 50" },
+        { "label": "󰃠", "type": "normal", "command": "hypr-brightness set 80" },
+        { "label": "󰝞", "type": "normal", "command": "hypr-brightness down" },
+        { "label": "󰝝", "type": "normal", "command": "hypr-brightness up" }
+      ]
+    },
+    "mpris": {
+      "blacklist": [],
+      "autohide": true,
+      "show-album-art": "always",
+      "loop-carousel": false
+    },
+    "notifications": {
+      "vexpand": true
+    }
+  }
+}
