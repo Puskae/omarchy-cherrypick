@@ -649,6 +649,18 @@ any invocation that finds the lock taken returns at once (~20ms) rather than
 queueing. Every value is checked against `^[0-9]{1,3}$` and `<= 100` before it is
 cached, so a diagnostic can never reach the bar again.
 
+**There is a floor at 5%, and every path goes through it.** A monitor at 0 is a
+black screen, and you cannot see well enough to undo it — DDC gives no feedback
+that would even tell you the panel is still on, so it reads as a dead display.
+`clamp()` is the one place any value passes through, which matters because there
+are five callers: the keybinds, the bar's scroll, swaync's brightness buttons,
+`config/gamemode.ini`, and the shell. A floor only some of them respect is not a
+floor. Raise or drop it with `FLOOR` at the top of the script. Note it is
+deliberately *not* a `min_limit` on the widget side: swaync's slider clamps by
+calling `set_value()` from inside its own `value_changed` handler, which resets
+the drag gesture mid-drag and leaves the handle stuck — so widgets get the full
+0–100 range and the script refuses the dark end.
+
 Not every monitor answers DDC/CI, and some need it enabled in their OSD first.
 `ddcutil detect` is the test — if it finds nothing, the module simply does not
 appear.
@@ -728,7 +740,10 @@ have no config of your own, and otherwise left alone apart from that one line.
 It then reloads each app in place — `hyprctl reload`, `pkill -USR2 waybar`, and a
 hyprpaper restart (it only re-reads its config on start), plus
 `swaync-client --reload-css` and `makoctl reload`, both of which re-read in place
-without dropping notification history. walker reads its theme at
+without dropping notification history. Both are gated on the daemon actually
+running, the same way the walker restart is — with mako installed as a fallback
+while swaync is the one in use, an ungated `makoctl reload` would report a reload
+that never happened on every single theme change. walker reads its theme at
 startup too, so its `--gapplication-service` daemon is restarted — but only if one
 was already running, so this never leaves a stray daemon on a machine that does not
 autostart it. btop and Neovim have no reload signal, so those two are reported
@@ -902,7 +917,8 @@ open, it's the better trade. Swap one line in `hyprland.lua`:
 hl.exec_cmd("mako")       -- instead of swaync
 ```
 
-then `pacman -S mako`, re-point the four `comma` binds at `makoctl`
+then `pacman -S mako`, `systemctl --user unmask mako.service` (see below),
+re-point the four `comma` binds at `makoctl`
 (`dismiss` / `dismiss --all` / `invoke` / `mode -t do-not-disturb`), drop the two
 `swaync-client` lines from `config/gamemode.ini`, and drop the
 `custom/notification` module from the bar — `makoctl` has no `-swb` equivalent, so
@@ -915,6 +931,41 @@ Anything from plain `notify-send` — including `bin/llm-vram-release` and
 sets 5s, and defines the `[mode=do-not-disturb]` section that the DND bind
 toggles; `makoctl mode -t` will happily toggle a mode no criteria section
 defines, changing nothing at all.
+
+#### Two daemons, one bus name
+
+If you keep mako installed as a fallback rather than removing it, note that it is
+still **D-Bus activatable**. Both daemons ship an activation file claiming
+`org.freedesktop.Notifications`:
+
+```console
+$ grep -h Name= /usr/share/dbus-1/services/{fr.emersion.mako,org.erikreider.swaync}.service
+Name=org.freedesktop.Notifications
+Name=org.freedesktop.Notifications
+```
+
+So the first notification after login makes systemd try to activate mako while
+swaync already owns the name, and the journal gets:
+
+```
+mako.service: Two services allocated for the same bus name
+org.freedesktop.Notifications, refusing operation.
+Activation request for 'org.freedesktop.Notifications' failed.
+```
+
+It is harmless — swaync keeps the name and the notification is delivered — but
+it is noise, and it means "mako is kept as a one-line fallback" is not quite
+true: the two race for the bus name. Silence it by masking the unit rather than
+uninstalling mako, which keeps the binary and its themed config around:
+
+```bash
+systemctl --user mask mako.service
+```
+
+Both activation files carry `SystemdService=`, so activation routes through the
+unit and masking is enough to stop it. The cost is that swapping back to mako is
+now a two-step fallback — `systemctl --user unmask mako.service` as well as the
+`hyprland.lua` line — which is why it is listed in the swap steps above.
 
 ---
 

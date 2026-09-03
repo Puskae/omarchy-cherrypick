@@ -345,7 +345,16 @@ def apply_swaync(theme, colors):
 
 
 def reload_swaync():
-    """swaync re-reads its CSS on demand; no restart, so nothing is lost."""
+    """swaync re-reads its CSS on demand; no restart, so nothing is lost.
+
+    Gated on swaync running, like reload_mako and restart_walker. -sw already
+    stops the client blocking on a daemon that isn't there, but it still exits
+    0, which would have this report a reload that never happened.
+    """
+    if subprocess.run(["pgrep", "-x", "swaync"],
+                      stdout=subprocess.DEVNULL).returncode != 0:
+        return False
+
     return subprocess.run(["swaync-client", "--reload-css", "-sw"],
                           stdout=subprocess.DEVNULL,
                           stderr=subprocess.DEVNULL).returncode == 0
@@ -377,7 +386,17 @@ def apply_mako(theme, colors):
 
 
 def reload_mako():
-    """mako re-reads its config on demand, so no restart and no lost history."""
+    """mako re-reads its config on demand, so no restart and no lost history.
+
+    Gated on mako actually running, the same way restart_walker is. mako stays
+    installed here as the fallback daemon while swaync is the one in use, so
+    without this check every theme change fires makoctl at a dead daemon --
+    harmless, but it reports a reload that did not happen.
+    """
+    if subprocess.run(["pgrep", "-x", "mako"],
+                      stdout=subprocess.DEVNULL).returncode != 0:
+        return False
+
     return subprocess.run(["makoctl", "reload"],
                           stdout=subprocess.DEVNULL,
                           stderr=subprocess.DEVNULL).returncode == 0
@@ -502,7 +521,8 @@ def apply(theme):
     for fn in (apply_btop, apply_neovim, apply_walker, apply_swaync, apply_mako):
         got = fn(theme, colors)
         if got:
-            # apply_walker returns a note instead of a name when it cannot run.
+            # apply_walker, apply_swaync and apply_mako return a note
+            # instead of a name when the app is there but its template is not.
             (notes if got.startswith("note:") else extras).append(got)
     extras += apply_terminals(theme, colors)
 
