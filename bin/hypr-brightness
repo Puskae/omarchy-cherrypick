@@ -41,14 +41,27 @@ set -euo pipefail
 STEP=5
 WAYBAR_SIGNAL=8   # matches "signal" on custom/brightness in the waybar config
 
-# Never go darker than this. A slider can reach 0, and a monitor at 0 is a black
-# screen you then cannot see well enough to undo it. The floor lives here rather
-# than in the caller because swaync's slider widget clamps by calling set_value()
-# from inside its own value_changed handler, which resets GTK's drag gesture
-# mid-drag: with a min_limit set, the handle stops following the pointer after
-# the first clamp and the slider is stuck for good. So the widget is given the
-# full 0-100 range and this is the thing that refuses to go too dark.
+# Never go darker than this. A monitor at 0 is a black screen you then cannot
+# see well enough to undo it, and DDC gives no feedback that would tell you the
+# panel is still on. The floor lives here rather than in each caller because
+# there are five of them -- the keybinds, waybar's scroll, swaync's buttons,
+# gamemode, and the shell -- and a floor that only some of them respect is not
+# a floor. clamp() below is the single place any value passes through.
+#
+# It is deliberately a floor and not a min_limit on the GTK side: swaync's
+# slider widget clamps by calling set_value() from inside its own
+# value_changed handler, which resets the drag gesture mid-drag and leaves the
+# handle stuck. Widgets get the full 0-100 range; this refuses the dark end.
 FLOOR=5
+
+# Every value written to the cache goes through here. Above 100 is nonsense,
+# below FLOOR is a screen you cannot recover from without a second machine.
+clamp() {
+  local value=$1
+  (( value < FLOOR )) && value=$FLOOR
+  (( value > 100 ))   && value=100
+  printf '%s' "$value"
+}
 
 # The caches are meaningless across a reboot, and the bus number can change when
 # a monitor is replugged, so the runtime dir is the right home for them.
@@ -142,11 +155,9 @@ nudge() {
   exec 8>"$value_lock"
   flock 8
   value=$(current)
-  value=$(( value + delta ))
   # Clamp rather than let ddcutil reject the value: at the ends of the range a
   # keypress should stop, not error.
-  (( value < 0 )) && value=0
-  (( value > 100 )) && value=100
+  value=$(clamp $(( value + delta )))
   printf '%s' "$value" > "$value_cache"
   flock -u 8
 
@@ -162,8 +173,7 @@ case "${1:-get}" in
   up)    nudge "${2:-$STEP}" ;;
   down)  nudge "-${2:-$STEP}" ;;
   set)   valid "${2:-}" || die "usage: hypr-brightness set <0-100>"
-         value=$2
-         (( value < FLOOR )) && value=$FLOOR
+         value=$(clamp "$2")
          printf '%s' "$value" > "$value_cache"
          pkill -RTMIN+$WAYBAR_SIGNAL waybar 2>/dev/null || true
          printf '%s\n' "$value"
