@@ -106,6 +106,16 @@ hl.env("HYPRCURSOR_SIZE", "24")
 -- overlay only appears on Shift_R + F12. Saves setting it per game.
 hl.env("MANGOHUD", "1")
 
+-- Qt/KDE apps (Dolphin, Ark, Okular) need the KDE platform theme named
+-- explicitly. Qt picks its theme plugin from XDG_CURRENT_DESKTOP, which is
+-- "Hyprland" here, so KDEPlasmaPlatformTheme6.so never loads and the app
+-- palette comes from the xdg-desktop-portal fallback instead of kdeglobals.
+-- The visible symptom is Dolphin drawing black label text on its dark
+-- background, which "fixes itself" only until the next launch when you pick a
+-- colour scheme by hand in its own settings. Needs the plasma-integration
+-- package; harmless if no Qt app is installed.
+hl.env("QT_QPA_PLATFORMTHEME", "kde")
+
 
 -----------------------
 ---- LOOK AND FEEL ----
