@@ -1,4 +1,8 @@
--- Omarchy 4.0 window rules, cherry-picked onto stock Hyprland.
+-- Window rules. Derived from Omarchy 4.0, cherry-picked onto stock Hyprland.
+--
+-- Placement for autostarted apps is NOT here -- it is generated from
+-- jpu.autostart by modules/autostart.lua, next to the command that starts
+-- each one.
 -- Source: omarchy default/hypr/windows.lua + default/hypr/apps/*.lua
 -- Translated from Omarchy's o.window() helper to the stock hl.window_rule API.
 
@@ -28,25 +32,35 @@ for name, pattern in pairs(opaque) do
   })
 end
 
--- Picture-in-picture: opaque, floating, pinned above everything, and parked in
--- the top-right corner at a fixed 16:9. Without the size and move it maps
--- wherever the browser asks, which on an ultrawide is usually the middle of the
--- screen and in the way.
+-- Picture-in-picture: opaque, 16:9, no border, and no focus grabbing.
+--
+-- Deliberately NOT floating and NOT pinned. A PiP window here behaves like any
+-- other window -- it tiles, and it stays on the workspace it was opened on --
+-- because that is what is wanted most of the time. SUPER + SHIFT + P
+-- (bindings.lua) flips the one on screen into a pinned corner overlay and back
+-- for the times it is not.
+--
+-- The title comes from profile.lua because it is locale-dependent: Firefox
+-- names this window in the system language, and the stock English-only pattern
+-- matches nothing on a non-English system.
 hl.window_rule({
   name  = "omarchy-pip",
-  match = { title = "(Picture.?in.?[Pp]icture)" },
+  match = { title = jpu.pip_title },
   opacity = "1.0 1.0",
-  float = true,
-  pin   = true,
-  -- PiP has no keyboard use -- its controls are all mouse -- and Firefox
-  -- re-requests activation whenever the window is retitled. With
-  -- misc.focus_on_activate on, that steals focus mid-typing, so refuse it here
-  -- instead of turning activation off for every application.
-  no_focus = true,
-  size  = { 600, 338 },
+  -- Firefox re-requests activation whenever it retitles this window, and with
+  -- misc.focus_on_activate on that steals focus mid-typing. Omarchy's answer is
+  -- no_focus, which is too blunt: an unfocusable window cannot be dragged or
+  -- resized either, so the overlay is nailed to wherever the toggle put it.
+  -- suppress_event refuses the *activation request* specifically and leaves the
+  -- window as clickable as any other.
+  suppress_event = "activatefocus",
+  -- ...and it still should not grab focus the moment it pops open, which is
+  -- mid-typing by definition. Click it when you want it.
+  no_initial_focus = true,
+  -- Applies whenever it is floating, whether that came from the overlay toggle
+  -- or from SUPER + T and a drag on the corner.
   keep_aspect_ratio = true,
   border_size = 0,
-  move  = { "(monitor_w-window_w-40)", "(monitor_h*0.04)" },
 })
 
 -- Google Meet names its PiP window after the meeting instead of calling it
@@ -57,10 +71,11 @@ hl.window_rule({
   opacity = "1.0 1.0",
   float = true,
   pin   = true,
-  -- PiP has no keyboard use -- its controls are all mouse -- and Firefox
-  -- re-requests activation whenever the window is retitled. With
-  -- misc.focus_on_activate on, that steals focus mid-typing, so refuse it here
-  -- instead of turning activation off for every application.
+  -- PiP has no keyboard use -- its controls are all mouse -- and with
+  -- misc.focus_on_activate on, a browser asking to activate it steals focus
+  -- mid-typing. This is still Omarchy's blunt no_focus, which also stops the
+  -- window being dragged or resized; the suppress_event + no_initial_focus
+  -- pair in the rule above avoids that, and has not been tried on Meet.
   no_focus = true,
   size  = { 600, 338 },
   keep_aspect_ratio = true,
@@ -118,10 +133,33 @@ hl.window_rule({
   idle_inhibit = "fullscreen",
 })
 
+-- Steam titles, gamescope, and anything running under Proton/Wine. Shared by
+-- the two rules below so they cannot drift apart.
+local games = "steam_app_.*|gamescope|.*\\.exe"
+
 hl.window_rule({
   name  = "omarchy-idle-inhibit-games",
-  match = { class = "steam_app_.*|gamescope|.*\\.exe" },
+  match = { class = games },
   idle_inhibit = "always",
+})
+
+-- A game gets a workspace of its own, and unlike Steam it does *not* get
+-- "silent": launching a game should take you to it.
+--
+-- "empty" is the first workspace with zero windows, scanning up from 1, so a
+-- second game launched while the first is running lands somewhere else on its
+-- own. The selector is evaluated when the window opens, so the second game
+-- already sees the first one's workspace as occupied.
+--
+-- float = false because a game that drops out of fullscreen while floating
+-- ends up sized to the monitor but positioned at an offset -- full-screen-sized
+-- with the borders showing off the bottom-right corner. Tiled, that state
+-- cannot happen.
+hl.window_rule({
+  name  = "omarchy-games-workspace",
+  match = { class = games },
+  workspace = "empty",
+  float = false,
 })
 
 -- Steam's own window: floating (its dialogs tile badly), and inhibiting only
@@ -166,6 +204,9 @@ hl.layer_rule({
 -- the current one without switching away from it, so SUPER + D overlays chat on
 -- a fullscreen game and dismisses it again -- the game never loses fullscreen
 -- and never gets told to redraw, which is what breaks alt-tabbing out of one.
+--
+-- A rule here rather than an autostart entry, so it applies however Discord was
+-- started. profile.lua's commented Discord line adds only never_focus on top.
 hl.window_rule({
   name  = "discord-overlay",
   match = { class = "discord" },
@@ -175,7 +216,7 @@ hl.window_rule({
 -- Games: fully opaque, and no animation/blur work on the frame they own.
 hl.window_rule({
   name  = "games-opaque",
-  match = { class = "steam_app_.*|gamescope|.*\\.exe" },
+  match = { class = games },
   opacity   = "1.0 1.0",
   no_anim   = true,
   no_blur   = true,

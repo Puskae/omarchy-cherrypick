@@ -9,7 +9,15 @@ hl.config({
     gaps_out = 10,
     border_size = 2,
 
-    resize_on_border = false,
+    -- Grab a window edge with the pointer to resize it. Omarchy ships this
+    -- off, which leaves SUPER + right-drag as the only way to resize with a
+    -- mouse -- fine when the other hand is on the keyboard, useless when it
+    -- is not. extend_border_grab_area (15, stock) makes the 2px border a
+    -- 15px target, and hover_icon_on_border (also stock) changes the cursor
+    -- so the target is visible. The cost is that the grab zone lives inside
+    -- the gap, so a click aimed at the very edge of a window resizes instead
+    -- of focusing.
+    resize_on_border = true,
     allow_tearing    = false,
     layout = "dwindle",
   },
@@ -70,10 +78,9 @@ hl.config({
     on_focus_under_fullscreen  = 1,
     initial_workspace_tracking = 0,
 
-    -- FreeSync on the AW3423DWF. 2 = fullscreen only: QD-OLED shifts
-    -- brightness when the refresh rate swings, which is very visible on a
-    -- static desktop and not in a game. Set to 1 for always-on.
-    vrr                        = 2,
+    -- Variable refresh rate depends on the panel, not on taste, so the value
+    -- lives in profile.lua.
+    vrr                        = jpu.vrr,
   },
 
   cursor = {

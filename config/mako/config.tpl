@@ -56,7 +56,7 @@ default-timeout=0
 [urgency=low]
 text-color={{ muted }}
 
-# SUPER + CTRL + comma toggles this mode (omarchy-bindings.lua). Without a
+# SUPER + CTRL + comma toggles this mode (modules/bindings.lua). Without a
 # section defining it, that bind toggles a mode that does nothing at all.
 [mode=do-not-disturb]
 invisible=1

@@ -45,7 +45,7 @@ scrollbar {
 }
 
 /* The launcher box. Square and bordered rather than rounded and shadowed,
-   matching border_size = 2 / rounding = 0 in omarchy-looknfeel.lua. */
+   matching border_size = 2 / rounding = 0 in modules/looknfeel.lua. */
 .box-wrapper {
   background: @window_bg_color;
   padding: 16px;

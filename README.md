@@ -24,7 +24,8 @@ is not a preference or a difficulty badge — it is how the thing is operated. T
 is no menu, no taskbar to click a window back out of, no drag-to-arrange. Launching
 an app, closing one, moving between workspaces, resizing a tile: each is a key
 combination and nothing else, and there are over a hundred of them in this config
-alone. `SUPER + K` prints the full list, and the first week is spent with it open.
+alone. `SUPER + K` opens the full list, grouped by section, and the first week is
+spent with it open.
 If that sounds like the appeal, you will get on well here. If it sounds like a
 chore you would rather not have, Plasma is genuinely the better desktop for you and
 staying on it costs you nothing.
@@ -49,8 +50,8 @@ staying on it costs you nothing.
 > for any other desktop's control panel, and for appearance: themes come from
 > `omarchy-theme <name>`, not from Plasma's Appearance page.
 >
-> In the Hyprland session, `~/.config/hypr/*.lua` is the only source of truth. Edit it,
-> then `hyprctl reload`.
+> In the Hyprland session, `~/.config/hypr/` — `profile.lua` and `modules/*.lua` — is
+> the only source of truth. Edit it, then `hyprctl reload`.
 
 > **Not affiliated with, endorsed by, or a distribution of Omarchy.**
 > Omarchy is a pending trademark of the Omacom Foundation. This repo cherry-picks
@@ -142,12 +143,15 @@ tested — not because it's coupled to it.
 install.sh               one-pass installer; backs up first, records a manifest
 bin/omarchy-theme        theme switcher; renders Omarchy's templates with no runtime
 bin/llm-vram-release     frees GPU VRAM from Ollama before a game starts
-bin/hypr-cheatsheet      keybinding cheatsheet in a terminal
+bin/hypr-cheatsheet      keybinding cheat sheet: a walker menu, grouped by section
 bin/hypr-record          screen-recording toggle
 bin/hypr-brightness      monitor brightness over DDC/CI (desktops have no backlight)
 bin/hypr-tailscale       tailscale status as a waybar module
-hypr/                    the Lua config set (hyprland.lua + 4 modules),
-                         plus hypridle.conf and hyprlock.conf
+hypr/hyprland.lua        entry point: monitors, env, input, animations, load order
+hypr/profile.lua         every machine-specific value, in one table -- edit this
+hypr/modules/            bindings, windows, looknfeel, qconsole, autostart
+hypr/hypridle.conf       idle -> lock
+hypr/hyprlock.conf       lock screen
 config/waybar/           bar config + stylesheet + a fallback colors.css
 config/walker/           launcher stylesheet template, rendered per theme
 config/swaync/           notification centre config + stylesheet template
@@ -166,10 +170,39 @@ so that logging in before you have picked a theme gives you a styled bar rather
 than an unstyled one and no clue why. The first `omarchy-theme <name>`
 overwrites it.
 
-`hypr-cheatsheet` decodes Hyprland's modmask bitfield with awk's `and()`, which is a
+`hypr-cheatsheet` needs no list of its own. Every bind in `modules/bindings.lua`
+goes through a small `bind()` wrapper that prefixes its description with the
+section it is declared under (`Windows: Toggle floating`), and the script reads
+that back out of `hyprctl binds` — so a bind added under a section shows up
+there with nothing else to edit. `SUPER + K` opens it as a walker menu, pick a
+section and read its binds; `hypr-cheatsheet --print` dumps the lot to a terminal.
+
+It decodes Hyprland's modmask bitfield with awk's `and()`, which is a
 **gawk** extension. Nothing to install on an Arch-family system — gawk is a dependency
 of both `base` and `pacman`, so it is always there — but the script prints nothing
 useful under mawk or busybox awk if you take it somewhere else.
+
+### `profile.lua` and `modules/`
+
+The split is the point. Anything you would have to change to run this on your
+machine — monitor, keyboard layout, terminal / browser / file manager / launcher,
+the picture-in-picture window title, what starts at login — is one table in
+`hypr/profile.lua`. Anything you would change because you disagree about how the
+desktop should *behave* lives in `hypr/modules/`. The modules read that table (the
+global `jpu`, assigned before any module loads) instead of hardcoding, so none of
+them needs to know what screen or keyboard it is running on.
+
+Three rules the Lua API imposes, worth knowing before editing — two of them fail
+silently:
+
+- **`hl.bind` is additive and there is no `hl.unbind`.** Binding a key twice makes
+  both actions fire; it does not replace. So every keybind has exactly one owner,
+  `modules/bindings.lua`, and layering a second binds file over it cannot work.
+- **Named window rules replace by name.** Redeclaring a rule's `name` updates it in
+  place, keeping its original position in the ordering — so a redeclaration
+  changes the rule's *content*, not its precedence against rules declared later.
+- **`hl.bind` has no keycode support** — see
+  [gotcha 2](#2-hlbind-has-no-keycode-support--and-fails-silently).
 
 ## What Omarchy has that this doesn't
 
@@ -181,7 +214,8 @@ could not be, because those binaries only exist inside an Omarchy install.
 **Not here, and not coming** -- these are the runtime, not configuration:
 
 - **`omarchy-menu`** -- the `SUPER + CTRL + <letter>` menus (capture, share,
-  theme, background, hardware, system). `SUPER + SPACE` opens walker here instead.
+  theme, background, hardware, system). `SUPER + SPACE` opens walker here instead,
+  and `SUPER + SHIFT + T` cycles themes.
 - **`omarchy-shell`** -- Omarchy's Quickshell bar and its audio, bluetooth,
   network, clipboard and calendar panels. Waybar stands in for the bar, and
   [bar modules](#bar-modules-bluetooth-tailscale-brightness) cover bluetooth,
@@ -286,8 +320,8 @@ which `SUPER + CTRL + W` and the bar's network module both open), `firefox` and 
 with Plasma — `dolphin`. The configs reference all four, so they are not in the
 list above; on a leaner Arch install that uses `iwd` or `systemd-networkd`
 instead, either `pacman -S networkmanager` or point that bind and the module's
-`on-click` somewhere else. The terminal, browser and file manager are declared at
-the top of `hypr/omarchy-bindings.lua` — swap them there if you prefer others.
+`on-click` somewhere else. The terminal, browser, file manager and launcher are
+declared in `hypr/profile.lua` — swap them there if you prefer others.
 
 ### 2. Omarchy's themes and templates
 
@@ -350,7 +384,7 @@ done
 # The directories may not exist yet -- Hyprland has never run here.
 mkdir -p ~/.config/hypr ~/.config/waybar ~/.config/MangoHud ~/.local/bin
 
-cp hypr/*              ~/.config/hypr/
+cp -r hypr/.           ~/.config/hypr/
 cp config/waybar/*     ~/.config/waybar/
 mkdir -p ~/.config/walker/themes/omarchy ~/.config/swaync ~/.config/mako
 cp config/walker/style.css.tpl ~/.config/walker/themes/omarchy/
@@ -401,14 +435,15 @@ overlay stays hidden until `Shift_R + F12`. Without the file you get an FPS
 counter stapled to every OpenGL and Vulkan app you own, Firefox included. If you
 don't want any of that, delete the `hl.env("MANGOHUD", "1")` line instead.
 
-**Edit `hypr/hyprland.lua` before using it.** `input.kb_layout` is `fi`, which is
-the one edit you cannot skip. The monitor block hardcodes a 3440x1440@164.90
-ultrawide on `DP-3`, but that one is safe to leave: a catch-all `hl.monitor` with
-`output = ""` sits above it, so an unknown display still comes up at its preferred
-mode and only your own monitor's name and refresh rate are worth filling in.
+**Edit `hypr/profile.lua` before using it.** `keyboard_layout` is `fi`, which is
+the one edit you cannot skip. The monitor entry names a 3440x1440@164.90
+ultrawide on `DP-3`, but that one is safe to leave: `hyprland.lua` declares a
+catch-all `hl.monitor` with `output = ""` before it, so an unknown display still
+comes up at its preferred mode and only your own monitor's name and refresh rate
+are worth filling in.
 
 **On a non-Finnish layout, three binds are dead until you rename them.** The
-resize and scratchpad binds in `hypr/omarchy-bindings.lua` name Finnish keysyms,
+resize and scratchpad binds in `hypr/modules/bindings.lua` name Finnish keysyms,
 and a keysym your layout does not produce registers fine and never fires — see
 [gotcha 2](#2-hlbind-has-no-keycode-support--and-fails-silently). They are the
 same physical keys either way, so on a US layout substitute:
@@ -421,7 +456,7 @@ same physical keys either way, so on a US layout substitute:
 
 ```sh
 sed -i 's/\.\. "plus"/.. "minus"/g; s/\.\. "dead_acute"/.. "equal"/g; s/SUPER + section/SUPER + grave/' \
-  ~/.config/hypr/omarchy-bindings.lua
+  ~/.config/hypr/modules/bindings.lua
 ```
 
 For any other layout, run
@@ -482,7 +517,7 @@ The session runs plain `start-hyprland`, **not** uwsm. Consequence: nothing ever
 activates `graphical-session.target`, so **every user unit that is `WantedBy=` it
 never starts.** hyprpaper even `Requires=` it.
 
-That's why the autostart block launches daemons **directly**:
+That's why `modules/autostart.lua` launches daemons **directly**:
 
 ```lua
 hl.on("hyprland.start", function()
@@ -520,7 +555,7 @@ wrong subsystem.
 An **empty walker with no results means no providers are installed** — not a broken
 walker.
 
-Both start from the autostart block:
+Both start from `modules/autostart.lua`:
 
 ```lua
 hl.exec_cmd("elephant")
@@ -631,6 +666,19 @@ click dismiss it. The glyph is a generic apps grid, not Omarchy's logo: this rep
 is not affiliated with Omarchy and should not ship its mark. Swap it for anything
 your Nerd Font has.
 
+Next to it is a **`+` button** that jumps to a fresh, empty workspace —
+`custom/newworkspace`, a one-line `hyprctl dispatch` on Hyprland's `empty`
+selector, which resolves to the lowest-numbered workspace with no windows on it.
+It is there for the times you are working one-handed with a mouse and not at the
+keyboard; `SUPER + 1..9` does the same job when both hands are free.
+
+Two more of those live at the left end of the right-hand cluster:
+`custom/screenshot` (left-click region to clipboard, right-click region to a
+file in your real Pictures directory, middle-click whole screen to clipboard —
+the same three things the `PRINT` binds do) and `custom/clipboard`, which opens
+walker's clipboard history like `SUPER + V`. Selecting a region is already a
+mouse job, so needing a key to start one was the odd part.
+
 **Bluetooth** is built into waybar — it speaks to bluez over D-Bus, so `bluez`
 and `bluez-utils` (already needed for the adapter) are the whole requirement. It
 shows the connected device count and enumerates paired devices in the tooltip.
@@ -709,11 +757,11 @@ theme tool calls `omarchy-theme-set`, which requires the runtime.
 An Omarchy theme is just `themes/<name>/colors.toml` — about 25 flat hex values.
 `default/themed/*.tpl` are templates with `{{ variable }}` slots. Applying a theme
 means rendering templates against one palette. That's the whole mechanism, and the
-core of it is about fifty lines. The script is ~380 because the rest is per-app skip
+core of it is about fifty lines. The script is ~800 because the rest is per-app skip
 guards, palette fallbacks for keys not every theme defines, and reloading each app
 in place afterwards.
 
-This script renders **eleven** outputs:
+This script renders **twelve** outputs:
 
 | Output | Path | Notes |
 |---|---|---|
@@ -728,6 +776,7 @@ This script renders **eleven** outputs:
 | walker           | `~/.config/walker/themes/omarchy/style.css` | walker restarted |
 | swaync           | `~/.config/swaync/style.css` | `swaync-client --reload-css` |
 | mako             | `~/.config/mako/config` | `makoctl reload` |
+| VS Code          | `~/.vscode-oss/extensions/omarchy-theme/` (or `~/.vscode/…`) | sets `workbench.colorTheme`; live |
 
 Each app is **skipped unless its binary is on `PATH`**, so the script is safe on a
 minimal system — and it does not skip a freshly installed app that has not created
@@ -777,7 +826,27 @@ was already running, so this never leaves a stray daemon on a machine that does 
 autostart it. btop and Neovim have no reload signal, so those two are reported
 rather than reloaded.
 
-**Templates still dormant**: ghostty, helix, obsidian, vscode, chromium, shell and
+**VS Code** — code-oss, VS Code or VSCodium, whichever has a settings directory —
+gets a local extension that only this script writes, with **one theme entry per
+palette**, and `workbench.colorTheme` in your `settings.json` pointed at the one
+just applied. VS Code watches `settings.json`, so the editor recolours in place.
+One entry per palette is the fix for a real bug rather than clutter: VS Code
+caches a parsed theme keyed on its label and file path, so a single shared
+"Omarchy" entry froze at whichever palette it first loaded and silently ignored
+every later apply — correct JSON on disk, stale colours on screen. The costs: a
+theme newly added to `~/.local/share/omarchy/themes` needs one VS Code restart
+before it can be selected, and a `settings.json` with comments or trailing commas
+is left untouched — the script prints the one line to add by hand instead. Themes
+that name a marketplace extension in their own `vscode.json` are not honoured;
+that would put a network install in the middle of a theme switch.
+
+**`omarchy-theme --next` and `--prev`** step through the installed themes in list
+order, wrapping at both ends, and raise a replacing notification naming the one
+applied. They are bound to `SUPER + SHIFT + T` and `SUPER + CTRL + SHIFT + T`, so
+stepping through several of them does not stack popups. They do not auto-repeat
+on a held key, on purpose: every step reloads Hyprland and each themed daemon.
+
+**Templates still dormant**: ghostty, helix, obsidian, chromium, shell and
 more. Adding one is a few lines — read the template, render it, write it, reload
 the app. PRs welcome.
 
@@ -939,7 +1008,7 @@ which runs both start scripts and the end script and reports each one.
 
 mako is still shipped, config and theme template both. It's a ~1 MB C daemon
 against swaync's GTK4 one, and if the panel turns out to be something you never
-open, it's the better trade. Swap one line in `hyprland.lua`:
+open, it's the better trade. Swap one line in `modules/autostart.lua`:
 
 ```lua
 hl.exec_cmd("mako")       -- instead of swaync
@@ -993,7 +1062,7 @@ systemctl --user mask mako.service
 Both activation files carry `SystemdService=`, so activation routes through the
 unit and masking is enough to stop it. The cost is that swapping back to mako is
 now a two-step fallback — `systemctl --user unmask mako.service` as well as the
-`hyprland.lua` line — which is why it is listed in the swap steps above.
+`modules/autostart.lua` line — which is why it is listed in the swap steps above.
 
 ---
 
@@ -1028,20 +1097,24 @@ told to redraw, which is the thing that makes alt-tabbing out of one go wrong.
 Two pieces make it work, both already in the configs:
 
 ```lua
--- omarchy-windows.lua: Discord is captured on launch, silently
+-- modules/windows.lua: Discord is captured on launch, silently
 hl.window_rule({
   name  = "discord-overlay",
   match = { class = "discord" },
   workspace = "special:discord silent",
 })
 
--- omarchy-bindings.lua
-hl.bind("SUPER + D", hl.dsp.workspace.toggle_special("discord"), { description = "Discord overlay" })
+-- modules/bindings.lua
+bind("SUPER + D", hl.dsp.workspace.toggle_special("discord"), { description = "Discord overlay" })
 ```
 
-`omarchy-qconsole.lua` sets `decoration:dim_special = 0.6`, which dims whatever
+`modules/qconsole.lua` sets `decoration:dim_special = 0.6`, which dims whatever
 is underneath *any* special workspace — so a game darkens while the Discord
 overlay is up. Set it to `0` in that file if you would rather it did not.
+
+To start Discord at login, uncomment its line in `profile.lua`'s autostart list.
+It carries `never_focus = true`, and needs it — see
+[autostart](#autostart-that-stays-out-of-the-way).
 
 Discord is **not** in the package lists above — install it yourself (`discord`, or the
 Flatpak) if you want this. Without it the bind is harmless: it toggles an empty
@@ -1052,11 +1125,81 @@ workspace.
 
 ---
 
-## Known issue: clicking a workspace on the bar
+## Windows: picture-in-picture, games, one-handed mouse
 
-On **waybar 0.15.0 + Hyprland 0.56**, clicking a workspace number in the bar does
-nothing. The button is fine — waybar hardcodes the pre-Lua dispatcher string
-`dispatch workspace <id>`, and Hyprland's Lua dispatcher rejects it:
+### Picture-in-picture
+
+A PiP window is an ordinary tiled window by default — opaque, borderless, on the
+workspace it was opened on. `SUPER + SHIFT + P` turns it into an overlay:
+floating, pinned (shown on every workspace), 600x338 in the top-right corner
+under the bar. Press it again and it drops back into its tiled slot.
+
+Two things about it cost real time:
+
+- **The title is localised.** Firefox names the window in the system language —
+  "Kuva kuvassa" on a Finnish system — so Omarchy's `Picture-in-Picture` match hit
+  nothing and every PiP rule was silently dead. `pip_title` in `profile.lua`
+  carries the English and Finnish names; add yours from `hyprctl clients`.
+- **`no_focus` is too blunt.** Omarchy uses it because Firefox re-requests
+  activation whenever it retitles the window, which steals focus mid-typing. But
+  an unfocusable window cannot be dragged or resized either. The rule here uses
+  `suppress_event = "activatefocus"`, which refuses the activation request and
+  leaves the window as clickable as any other. The toggle names the window
+  explicitly (`window = pip`), because dispatchers act on the focused window by
+  default — and when you press the bind, that is whatever you were typing in.
+
+Google Meet's PiP is titled after the meeting, so it has a rule of its own and
+still comes up floating and pinned.
+
+### Games get their own workspace
+
+Anything matching `steam_app_.*|gamescope|.*\.exe` opens on `empty` — the
+lowest-numbered workspace with no windows on it — and takes you there; a second
+game lands on the next free one. The rule also forces `float = false`, because a
+floating game that drops out of fullscreen comes back monitor-sized but offset,
+with its borders hanging off the bottom-right of the screen.
+
+### Autostart that stays out of the way
+
+`autostart` in `profile.lua` is a list of `{ cmd, class, workspace }` entries, and
+`modules/autostart.lua` turns each one into both the `exec_cmd` and a
+`workspace = "<n> silent"` rule — an app is one line, not two edits with a class
+regex duplicated between them. `class` and `workspace` are optional; the shipped
+list just starts a terminal.
+
+`silent` only covers the moment the window maps. An app that asks to be activated
+*later* still gets focus — Discord's updater relaunches it, and the relaunched
+window then pulls its special workspace open over whatever you were doing. Add
+`never_focus = true` to refuse those requests for good. It is opt-in because it
+also kills "click the notification and the app comes forward".
+
+### One hand on the mouse
+
+The desktop stays usable without the keyboard:
+
+- **Drag a window edge to resize it.** `resize_on_border` is on, against Omarchy's
+  default. The grab zone is 15px and sits in the gap, so a click aimed at the very
+  edge of a window resizes it instead of focusing it.
+- `SUPER + left-drag` moves a window, `SUPER + right-drag` resizes it.
+- `SUPER + scroll` and `SUPER + thumb buttons` (`mouse:275` back, `mouse:276`
+  forward) change workspace. The thumb binds need SUPER on purpose: Hyprland binds
+  are global with no per-app escape, so bare ones would eat back/forward in every
+  browser and file manager.
+- The bar's `+`, screenshot and clipboard buttons, and the click actions on its
+  modules — see [Bar modules](#bar-modules-bluetooth-tailscale-brightness).
+
+---
+
+## Clicking a workspace on the bar needs a recent waybar
+
+Run `waybar --version`. If it reports plain **0.15.0**, clicking a workspace
+number in the bar does nothing; if it reports a `-<n>-g<sha>` suffix from
+`waybar-git`, clicks work and you can skip this section. The reference setup
+runs `waybar-git` and clicks work there.
+
+On a plain 0.15.0 the button itself is fine — waybar hardcodes the pre-Lua
+dispatcher string `dispatch workspace <id>`, and Hyprland's Lua dispatcher
+rejects it:
 
 ```console
 $ hyprctl dispatch workspace 2
@@ -1071,21 +1214,21 @@ is the same root cause, except here the offending string is compiled into waybar
 rather than sitting in a config file you can fix. Hyprland has no
 legacy-dispatcher option, so nothing can be done from the Hyprland side either.
 
-**Already fixed upstream, just not released.**
+**Fixed upstream, in master since July 2026.**
 [Alexays/Waybar#5013](https://github.com/Alexays/Waybar/pull/5013) taught the
 module Hyprland's Lua dispatch protocol; both reports
 ([#5008](https://github.com/Alexays/Waybar/issues/5008),
-[#5147](https://github.com/Alexays/Waybar/issues/5147)) were closed on it in
-July 2026. The newest waybar *release* is still 0.15.0 (February 2026), which
-predates the fix — so on distro packages the symptom is live. Three ways to deal
-with it, the last of which is a trap:
+[#5147](https://github.com/Alexays/Waybar/issues/5147)) were closed on it. The
+fix postdates the 0.15.0 tag (February 2026), so whether you have it depends
+entirely on whether your waybar is built from master. Three ways to deal with
+it, the last of which is a trap:
 
 - **Install `waybar-git`** (AUR, or chaotic-aur) and clicks work today. Simplest
-  real fix; the cost is tracking master.
-- **Wait for the next waybar release**, and switch workspaces meanwhile with
-  `SUPER+1..9` or by **scrolling over the bar** — that path works on 0.15.0,
-  because the shipped `on-scroll-up`/`on-scroll-down` are config strings and so
-  use the Lua form.
+  real fix, and what the reference setup does; the cost is tracking master.
+- **Wait for a waybar release that includes #5013**, and switch workspaces
+  meanwhile with `SUPER+1..9` or by **scrolling over the bar** — that path works
+  on 0.15.0, because the shipped `on-scroll-up`/`on-scroll-down` are config
+  strings and so use the Lua form. So does the `+` button, for the same reason.
 - **Don't** swap in `ext/workspaces`, the other workaround those threads
   suggest. It clicks fine, but the module has no special-workspace support —
   which silently breaks the Discord overlay above.
@@ -1168,10 +1311,11 @@ rm -f ~/.config/hypr/theme.lua ~/.config/hypr/hyprpaper.conf \
       ~/.config/swaync/style.css ~/.config/mako/config \
       ~/.config/nvim/lua/plugins/omarchy-theme.lua \
       ~/.local/state/omarchy-theme
+rm -rf ~/.vscode-oss/extensions/omarchy-theme ~/.vscode/extensions/omarchy-theme
 rm -rf ~/.local/share/omarchy ~/.local/share/omarchy-cherrypick   # themes, manifest
 ```
 
-**Four things nothing above can undo for you**, and the honest reason each is left
+**Five things nothing above can undo for you**, and the honest reason each is left
 alone:
 
 - **Packages.** They are recorded in the manifest and never removed. `pacman -Rns
@@ -1188,6 +1332,9 @@ alone:
 - **`walker/config.toml`.** One line names the `omarchy` theme. If the file was
   created by `omarchy-theme` (copied from walker's stock config) you can delete it
   outright; if it was yours, change that line back.
+- **VS Code's `settings.json`.** `workbench.colorTheme` names an
+  `Omarchy (<theme>)` entry that the extension removed above provided. Point it
+  back at a theme you still have.
 
 **And the blunt version**, if you never had a Hyprland setup to preserve and just
 want it gone:

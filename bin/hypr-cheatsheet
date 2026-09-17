@@ -1,18 +1,112 @@
 #!/bin/sh
-# Print every described Hyprland bind as "KEYS<TAB>description".
-hyprctl binds | awk '
+# Keybinding cheat sheet, one group at a time.
+#
+# modules/bindings.lua files every described bind under the section it is
+# declared in, as a "Section: description" prefix. hyprctl binds exposes
+# nothing about a bind except its description, so that prefix is how the
+# grouping gets here -- and it means there is no list in this script to keep
+# in step with the config.
+#
+#   hypr-cheatsheet          walker menu: pick a group, then read its binds
+#   hypr-cheatsheet --print  every group as plain text, for a terminal
+
+# One line per action -- group<TAB>keys<TAB>description -- in the order the
+# binds were declared. Binds sharing a group and a description (SUPER + TAB and
+# SUPER + scroll down are both "Next workspace") are merged onto one line.
+table=$(hyprctl binds 2>/dev/null | awk '
+function pretty(k) {
+  return (k in names) ? names[k] : k
+}
 function keys(  s) {
   s = ""
   if (and(mod, 64)) s = s "SUPER + "
   if (and(mod, 4))  s = s "CTRL + "
   if (and(mod, 8))  s = s "ALT + "
   if (and(mod, 1))  s = s "SHIFT + "
-  return s (key != "" ? key : "code:" code)
+  return s (key != "" ? pretty(key) : "code:" code)
 }
-/^bindd?$/            { mod = 0; key = ""; code = ""; desc = "" }
-/^\tmodmask:/         { mod  = $2 }
-/^\tkey:/             { key  = $2 }
-/^\tkeycode:/         { code = $2 }
-/^\tdescription:/     { sub(/^\tdescription: /, ""); desc = $0 }
-/^\tdispatcher:/      { if (desc != "") printf "%-34s %s\n", keys(), desc }
-' | sort -u | less -FX
+BEGIN {
+  # Keysym names as printed on the key, rather than as Hyprland spells them.
+  names["RETURN"]  = "Enter"; names["ESCAPE"] = "Esc";   names["BACKSPACE"]  = "Backspace"
+  names["TAB"]     = "Tab";   names["SPACE"]  = "Space"; names["PRINT"]      = "Print"
+  names["LEFT"]    = "←";     names["RIGHT"]  = "→";     names["UP"]         = "↑"
+  names["DOWN"]    = "↓";     names["plus"]   = "+";     names["dead_acute"] = "´"
+  names["section"] = "§";     names["comma"]  = ","
+  names["mouse:272"]  = "left drag";   names["mouse:273"] = "right drag"
+  names["mouse_down"] = "scroll down"; names["mouse_up"]  = "scroll up"
+  names["mouse:275"]  = "thumb back";  names["mouse:276"] = "thumb forward"
+  names["XF86AudioRaiseVolume"] = "Volume up key"; names["XF86AudioLowerVolume"] = "Volume down key"
+  names["XF86AudioMute"] = "Mute key"; names["XF86AudioMicMute"] = "Mic mute key"
+  names["XF86AudioNext"] = "Next key"; names["XF86AudioPrev"]    = "Previous key"
+  names["XF86AudioPlay"] = "Play key"; names["XF86AudioPause"]   = "Pause key"
+}
+/^bind[a-z]*$/     { mod = 0; key = ""; code = ""; desc = "" }
+/^\tmodmask:/      { mod  = $2 }
+/^\tkey:/          { key  = $2 }
+/^\tkeycode:/      { code = $2 }
+/^\tdescription:/  { sub(/^\tdescription: /, ""); desc = $0 }
+/^\tdispatcher:/ {
+  if (desc == "") next
+  group = "Other"
+  if ((i = index(desc, ": ")) > 0) { group = substr(desc, 1, i - 1); desc = substr(desc, i + 2) }
+  id = group SUBSEP desc
+  k = keys()
+  if (!(id in row)) { row[id] = ++n; rg[n] = group; rd[n] = desc; rk[n] = k }
+  else if (index(" / " rk[row[id]] " / ", " / " k " / ") == 0) rk[row[id]] = rk[row[id]] " / " k
+}
+END { for (i = 1; i <= n; i++) printf "%s\t%s\t%s\n", rg[i], rk[i], rd[i] }
+')
+
+if [ -z "$table" ]; then
+  echo "hypr-cheatsheet: no described binds -- is Hyprland running?" >&2
+  exit 1
+fi
+
+groups=$(printf '%s\n' "$table" | cut -f1 | awk '!seen[$0]++')
+
+# The binds of one group, keys padded into a column. An empty group means all
+# of them, each tagged with the group it belongs to.
+rows() {
+  printf '%s\n' "$table" | awk -F '\t' -v want="$1" '
+    want == "" || $1 == want { n++; g[n] = $1; k[n] = $2; d[n] = $3; if (length($2) > w) w = length($2) }
+    END { for (i = 1; i <= n; i++) printf "%-*s   %s%s\n", w, k[i], d[i], (want == "" ? "   (" g[i] ")" : "") }'
+}
+
+if [ "${1-}" = --print ]; then
+  printf '%s\n' "$groups" | while IFS= read -r group; do
+    printf '%s\n' "$group"
+    rows "$group" | sed 's/^/  /'
+    echo
+  done
+  exit 0
+fi
+
+all="All keybindings"
+back="‹ Back"
+
+# Esc (an empty selection) closes the sheet from either level. Picking a bind
+# just leaves its group open: the sheet is there to be read, and a click on a
+# line should not throw you back out of the group you were reading.
+while :; do
+  group=$(
+    {
+      printf '%s\n' "$groups" | while IFS= read -r g; do
+        printf '%s  (%s)\n' "$g" "$(rows "$g" | wc -l)"
+      done
+      echo "$all"
+    } | walker --dmenu --placeholder "Keybindings"
+  )
+  group=${group%  (*}
+  case $group in
+    "")     exit 0 ;;
+    "$all") group= ;;
+  esac
+
+  while :; do
+    pick=$({ echo "$back"; rows "$group"; } | walker --dmenu --placeholder "${group:-$all}")
+    case $pick in
+      "")      exit 0 ;;
+      "$back") break ;;
+    esac
+  done
+done

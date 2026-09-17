@@ -1,13 +1,27 @@
 -- Hyprland entry point. Reference: https://wiki.hypr.land/Configuring/Start/
 --
--- This file holds only what is specific to *this* machine and session:
--- monitors, autostart, environment, input, and the window rules Hyprland
--- ships as sane defaults. Everything cosmetic lives in the Omarchy modules
--- dofile'd at the bottom, which are loaded last and therefore win.
+-- This file wires the config together and holds only what has nowhere better
+-- to live: monitors, environment, input, animation curves. Machine-specific
+-- values come from profile.lua; behaviour lives in modules/.
 --
--- Stock settings that those modules override have been deleted rather than
--- left here commented out -- a duplicate that loses is just a lie about what
--- is in effect.
+-- Stock settings that a module overrides have been deleted rather than left
+-- here commented out -- a duplicate that loses is just a lie about what is in
+-- effect.
+--
+-- Load order matters and is the mechanism, not an accident:
+--   * hl.config() merges, so a later module wins per key.
+--   * Named window rules replace by name, so redeclaring a rule's name updates
+--     it in place -- keeping its original position in the ordering.
+--   * hl.bind is ADDITIVE and there is no hl.unbind. A second bind on a key
+--     does not replace the first, it fires as well. Every keybind therefore
+--     has exactly one owner: modules/bindings.lua.
+
+local hypr = os.getenv("HOME") .. "/.config/hypr/"
+
+-- Global on purpose. Every module reads it, and assigning it here -- before a
+-- single module loads -- keeps the dependency visible at the top of the file
+-- rather than hidden in a require graph.
+jpu = dofile(hypr .. "profile.lua")
 
 
 ------------------
@@ -15,6 +29,8 @@
 ------------------
 
 -- See https://wiki.hypr.land/Configuring/Basics/Monitors/
+-- Catch-all first, so an unplanned display (a TV, a projector) still lights up
+-- at something sane instead of not at all.
 hl.monitor({
     output   = "",
     mode     = "preferred",
@@ -22,64 +38,7 @@ hl.monitor({
     scale    = "auto",
 })
 
--- AW3423DWF: "preferred" lands on 60Hz, so name the mode. The panel has no
--- 120Hz at native width -- 3440x1440 offers 59.97 / 99.98 / 164.90 only.
-hl.monitor({
-    output   = "DP-3",
-    mode     = "3440x1440@164.90",
-    position = "0x0",
-    scale    = 1,
-})
-
-
----------------------
----- MY PROGRAMS ----
----------------------
-
--- Only the terminal is referenced here (autostart, below). The browser and
--- file manager live in omarchy-bindings.lua, which declares its own.
-local terminal = "alacritty"
-
-
--------------------
----- AUTOSTART ----
--------------------
-
--- See https://wiki.hypr.land/Configuring/Basics/Autostart/
-
--- Autostart necessary processes (like notifications daemons, status bars, etc.)
--- Or execute your favorite apps at launch like this:
---
-hl.on("hyprland.start", function()
-  -- Omarchy's slow-app-launch fix: hand systemd and D-Bus the session
-  -- environment before anything that talks to a portal starts.
-  hl.exec_cmd("systemctl --user import-environment $(env | cut -d'=' -f 1)")
-  hl.exec_cmd("dbus-update-activation-environment --systemd --all")
-
-  -- Launched directly, not via their systemd units: every one of those is
-  -- WantedBy=graphical-session.target (hyprpaper even Requires= it), and
-  -- nothing activates that target in a plain, non-uwsm Hyprland session.
-  hl.exec_cmd("/usr/lib/hyprpolkitagent/hyprpolkitagent")  -- GUI auth prompts
-  hl.exec_cmd("hyprpaper")  -- wallpaper
-  -- Notification daemon. swaync rather than mako for the control centre: a
-  -- panel that lists what you missed and keeps each notification's action
-  -- buttons live. mako is still shipped as a fallback -- swap this one line
-  -- back to hl.exec_cmd("mako") and its config is already there.
-  hl.exec_cmd("swaync")     -- notifications
-  hl.exec_cmd("waybar")     -- status bar
-  hl.exec_cmd("hypridle")   -- idle -> lock
-
-  -- Walker's backend. Nothing else starts it: the elephant package ships no
-  -- systemd unit, and Omarchy enables one it writes itself during install.
-  -- Without elephant, walker maps its overlay and sits on "waiting for
-  -- elephant" forever while holding keyboard focus -- which is what made the
-  -- session look like the keyboard had died.
-  hl.exec_cmd("elephant")
-  hl.exec_cmd("walker --gapplication-service")  -- launcher daemon; walker
-                                                -- warns when it is missing
-
-  hl.exec_cmd(terminal)
-end)
+hl.monitor(jpu.monitor)
 
 
 -------------------------------
@@ -121,9 +80,9 @@ hl.env("QT_QPA_PLATFORMTHEME", "kde")
 ---- LOOK AND FEEL ----
 -----------------------
 
--- Gaps, borders, rounding, shadow and blur are all set by
--- omarchy-looknfeel.lua. Border colors come from theme.lua. Only the
--- animation master switch is left here, because nothing downstream sets it.
+-- Gaps, borders, rounding, shadow and blur are all set by modules/looknfeel.
+-- Border colors come from theme.lua. Only the animation master switch is left
+-- here, because nothing downstream sets it.
 -- Refer to https://wiki.hypr.land/Configuring/Basics/Variables/
 hl.config({
     animations = {
@@ -159,7 +118,7 @@ hl.animation({ leaf = "workspacesIn",  enabled = true,  speed = 1.21, bezier = "
 hl.animation({ leaf = "workspacesOut", enabled = true,  speed = 1.94, bezier = "almostLinear", style = "fade" })
 hl.animation({ leaf = "zoomFactor",    enabled = true,  speed = 7,    bezier = "quick" })
 
--- dwindle and master are configured in omarchy-looknfeel.lua. This one is not.
+-- dwindle and master are configured in modules/looknfeel. This one is not.
 -- See https://wiki.hypr.land/Configuring/Layouts/Scrolling-Layout/ for more
 hl.config({
     scrolling = {
@@ -167,20 +126,21 @@ hl.config({
     },
 })
 
+
 ----------------
 ----  MISC  ----
 ----------------
 
 hl.config({
     misc = {
-        -- omarchy-looknfeel.lua disables the logo outright; this only governs
+        -- modules/looknfeel disables the logo outright; this only governs
         -- which stock wallpaper would be used if one ever were.
         force_default_wallpaper = -1,
 
         -- Both default to false, which makes a DPMS-blanked screen look like a
         -- dead machine: hypridle's on-resume is then the *only* thing that can
         -- bring the display back, so if it is misconfigured or not running you
-        -- are left hammering a keyboard at a black monitor. Omarchy sets both.
+        -- are left hammering a keyboard at a black monitor.
         key_press_enables_dpms  = true,
         mouse_move_enables_dpms = true,
     },
@@ -193,7 +153,7 @@ hl.config({
 
 hl.config({
     input = {
-        kb_layout  = "fi",
+        kb_layout  = jpu.keyboard_layout,
         kb_variant = "",
         kb_model   = "",
         kb_options = "",
@@ -219,24 +179,13 @@ hl.gesture({
     action = "workspace"
 })
 
----------------------
----- KEYBINDINGS ----
----------------------
-
--- All keybindings now live in omarchy-bindings.lua, dofile'd at the bottom of
--- this file. The stock binds that used to sit here were removed rather than
--- overridden: Hyprland registers duplicate keybinds additively, so leaving them
--- in would make SUPER + Q both open a terminal and close the focused window.
-
 
 --------------------------------
----- WINDOWS AND WORKSPACES ----
+---- BASELINE WINDOW RULES ----
 --------------------------------
 
 -- See https://wiki.hypr.land/Configuring/Basics/Window-Rules/
--- and https://wiki.hypr.land/Configuring/Basics/Workspace-Rules/
-
--- Example window rules that are useful
+-- Hyprland's own sane defaults. Everything opinionated is in modules/windows.
 
 hl.window_rule({
     -- Ignore maximize requests from all apps.
@@ -261,7 +210,6 @@ hl.window_rule({
     no_focus = true,
 })
 
--- Hyprland-run windowrule
 hl.window_rule({
     name  = "move-hyprland-run",
     match = { class = "hyprland-run" },
@@ -271,23 +219,24 @@ hl.window_rule({
 })
 
 
------------------------------------
----- OMARCHY 4.0 (cherry-picked) ----
------------------------------------
+-----------------
+---- MODULES ----
+-----------------
 
--- Loaded last so these override the stock values above.
--- dofile with an absolute path avoids depending on package.path.
--- Manage the theme with: omarchy-theme <name>
-local hypr = os.getenv("HOME") .. "/.config/hypr/"
+-- Loaded last so these override the baseline above. dofile with an absolute
+-- path avoids depending on package.path.
+local modules = hypr .. "modules/"
 
-dofile(hypr .. "omarchy-looknfeel.lua")
-dofile(hypr .. "omarchy-windows.lua")
-dofile(hypr .. "omarchy-qconsole.lua")
-dofile(hypr .. "omarchy-bindings.lua")
+dofile(modules .. "looknfeel.lua")
+dofile(modules .. "windows.lua")
+dofile(modules .. "autostart.lua")
+dofile(modules .. "qconsole.lua")
+dofile(modules .. "bindings.lua")
 
--- theme.lua is generated by `omarchy-theme <name>`, so it does not exist yet on
--- a fresh checkout. dofile on a missing file raises and takes the whole config
--- down with it -- which locks you out of the session. Load it only if present.
+-- theme.lua is generated by `omarchy-theme <name>` and gitignored, so it does
+-- not exist on a fresh clone. dofile on a missing file raises and takes the
+-- whole config down with it -- which locks you out of the session. Load it
+-- only if present.
 local theme = hypr .. "theme.lua"
 local fh = io.open(theme)
 if fh then

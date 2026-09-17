@@ -316,6 +316,7 @@ fi
 step "Configs"
 
 ensure_dir "$HOME/.config/hypr"
+ensure_dir "$HOME/.config/hypr/modules"
 ensure_dir "$HOME/.config/waybar"
 ensure_dir "$HOME/.config/MangoHud"
 ensure_dir "$HOME/.config/walker/themes/omarchy"
@@ -326,9 +327,28 @@ ensure_dir "$HOME/.local/bin"
 # theme.lua and hyprpaper.conf are gitignored -- they are omarchy-theme's
 # output, not source -- so a checkout has nothing to copy for them and the
 # first `omarchy-theme <name>` creates both.
-for f in "$REPO"/hypr/*; do
-  install_file "$f" "$HOME/.config/hypr/$(basename "$f")"
+#
+# Two levels, files only: a bare hypr/* glob would hand install_file the
+# modules/ directory itself.
+for f in "$REPO"/hypr/* "$REPO"/hypr/modules/*; do
+  [[ -f $f ]] || continue
+  install_file "$f" "$HOME/.config/hypr/${f#"$REPO"/hypr/}"
 done
+
+# Before the profile.lua + modules/ split the modules sat flat in hypr/ as
+# omarchy-*.lua, and an update over such an install leaves them behind. Nothing
+# loads them any more, so they are inert -- but editing one would be editing a
+# dead file with no sign of it. Reported rather than deleted: they may carry
+# your edits, and removal is the README's job, not the installer's.
+stale=()
+for f in "$HOME"/.config/hypr/omarchy-{bindings,windows,looknfeel,qconsole}.lua; do
+  [[ -e $f ]] && stale+=("$f")
+done
+if (( ${#stale[@]} )); then
+  warn "left over from the old flat layout and no longer loaded -- carry any edits
+       over into profile.lua or modules/, then delete them:
+$(printf '         %s\n' "${stale[@]}")"
+fi
 
 for f in "$REPO"/config/waybar/*; do
   install_file "$f" "$HOME/.config/waybar/$(basename "$f")"
@@ -435,19 +455,19 @@ say "  Backups:  $BACKUP_DIR"
 say ""
 say "${B}  Three things the script will not do for you:${N}"
 say ""
-say "  1. ${B}Keyboard layout.${N} hypr/hyprland.lua sets input.kb_layout = \"fi\"."
+say "  1. ${B}Keyboard layout.${N} hypr/profile.lua sets keyboard_layout = \"fi\"."
 say "     This is the one edit you cannot skip:"
-say "         \$EDITOR ~/.config/hypr/hyprland.lua"
+say "         \$EDITOR ~/.config/hypr/profile.lua"
 say ""
-say "  2. ${B}Monitor.${N} The block hardcodes 3440x1440@164.90 on DP-3. Safe to"
-say "     leave -- a catch-all hl.monitor above it brings an unknown display up"
-say "     at its preferred mode -- but yours is worth filling in."
+say "  2. ${B}Monitor.${N} The same file names 3440x1440@164.90 on DP-3. Safe to"
+say "     leave -- a catch-all hl.monitor in hyprland.lua brings an unknown"
+say "     display up at its preferred mode -- but yours is worth filling in."
 say ""
 say "  3. ${B}Three binds name Finnish keysyms${N} and are dead on other layouts."
 say "     A keysym your layout cannot produce registers fine and never fires."
 say "     On a US layout:"
 say "         sed -i 's/\\.\\. \"plus\"/.. \"minus\"/g; s/\\.\\. \"dead_acute\"/.. \"equal\"/g; s/SUPER + section/SUPER + grave/' \\"
-say "           ~/.config/hypr/omarchy-bindings.lua"
+say "           ~/.config/hypr/modules/bindings.lua"
 say ""
 say "${B}  Then log out and pick Hyprland at the login screen.${N}"
 say ""

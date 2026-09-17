@@ -12,11 +12,12 @@
 -- How much of the usable screen the console covers, measured from the top.
 local share = 0.5
 
--- The terminal to open when the console is toggled on while empty. The exec
--- rule has to name the workspace itself: Hyprland only tags a spawn with the
--- workspace it came from while misc.initial_workspace_tracking is on, and
--- omarchy-looknfeel.lua turns that off.
-local seed = "[workspace special:scratchpad silent] alacritty"
+-- The terminal (jpu.terminal, from profile.lua) to open when the console is
+-- toggled on while empty. The exec rule has to name the workspace itself:
+-- Hyprland only tags a spawn with the workspace it came from while
+-- misc.initial_workspace_tracking is on, and modules/looknfeel.lua turns that
+-- off.
+local seed = "[workspace special:scratchpad silent] " .. jpu.terminal
 
 -- Dimming only applies while a special workspace is open, so the console is set
 -- apart from the workspace underneath at no cost the rest of the time.

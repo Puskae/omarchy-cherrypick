@@ -27,6 +27,9 @@ window#waybar {
 #pulseaudio,
 #custom-media,
 #custom-menu,
+#custom-newworkspace,
+#custom-screenshot,
+#custom-clipboard,
 #custom-brightness,
 #custom-tailscale,
 #custom-notification,
@@ -47,6 +50,37 @@ window#waybar {
 }
 
 #custom-menu:hover {
+  background-color: alpha(@accent, 0.15);
+}
+
+/* The new-workspace button. Muted rather than accented: it belongs to the
+   workspace row it sits next to, and a second bright glyph beside the launcher
+   would read as a second launcher. Padding is tightened on the left so it
+   groups with the workspace numbers instead of with the menu. */
+#custom-newworkspace {
+  color: @muted;
+  font-size: 14px;
+  padding: 0 6px 0 4px;
+}
+
+#custom-newworkspace:hover {
+  color: @fg;
+  background-color: alpha(@accent, 0.15);
+}
+
+/* Action buttons at the left end of the right-hand cluster. Muted like the
+   status readouts they sit beside -- they are tools, not alerts -- and lit on
+   hover so it is obvious they are clickable at all, which a flat bar otherwise
+   hides. */
+#custom-screenshot,
+#custom-clipboard {
+  color: @muted;
+  padding: 0 7px;
+}
+
+#custom-screenshot:hover,
+#custom-clipboard:hover {
+  color: @fg;
   background-color: alpha(@accent, 0.15);
 }
 

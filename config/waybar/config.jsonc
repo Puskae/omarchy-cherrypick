@@ -9,9 +9,11 @@
   "height": 26,
   "spacing": 0,
 
-  "modules-left": ["custom/menu", "hyprland/workspaces", "hyprland/submap"],
+  "modules-left": ["custom/menu", "custom/newworkspace", "hyprland/workspaces", "hyprland/submap"],
   "modules-center": ["clock"],
   "modules-right": [
+    "custom/screenshot",
+    "custom/clipboard",
     "tray",
     "custom/media",
     "custom/brightness",
@@ -39,23 +41,73 @@
     "on-click": "walker"
   },
 
+  // A mouse-reachable "give me a fresh workspace". Sits between the launcher
+  // and the workspace row because that is where the workspace it creates will
+  // appear.
+  //
+  // "empty" is a Hyprland workspace selector, not a name: it resolves to the
+  // lowest-numbered workspace with no windows on it, scanning up from 1. So
+  // with 1, 2, 4 and 5 in use this lands on 3, and Hyprland creates the
+  // workspace on the spot -- there is nothing to pre-declare.
+  //
+  // Lua dispatcher form. Hyprland 0.56 parses dispatches as Lua, so the old
+  // "hyprctl dispatch workspace empty" is a syntax error that fails silently
+  // from a bar button. Switching workspaces is hl.dsp.focus{}, not
+  // hl.dsp.workspace{} -- the latter is a table of workspace *operations*
+  // (move, rename, toggle_special) and calling it raises.
+  "custom/newworkspace": {
+    "format": "+",
+    "tooltip-format": "New empty workspace",
+    "on-click": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"empty\" })'"
+  },
+
   "hyprland/workspaces": {
     // No "on-click" here: that's a sway/workspaces option. On
     // hyprland/workspaces waybar would run it as a shell command and
-    // swallow the built-in click-to-switch.
+    // swallow the built-in click-to-switch -- and the built-in handler is
+    // the one you want, because it knows which button was clicked.
     //
-    // Note that click-to-switch is broken anyway on waybar 0.15.0 +
-    // Hyprland 0.56: waybar hardcodes the pre-Lua "dispatch workspace <id>",
-    // which the Lua dispatcher rejects. Fixed upstream in Alexays/Waybar#5013
-    // but unreleased as of 0.15.0 -- install waybar-git if you want clicks
-    // now. Not fixable from config; see the README. Scroll below works, as
-    // do the SUPER+1..9 keys.
+    // Click-to-switch works on this box. It does NOT work on a
+    // distro-packaged waybar 0.15.0, which hardcodes the pre-Lua
+    // "dispatch workspace <id>" string that Hyprland 0.56's Lua dispatcher
+    // rejects; the error goes back over IPC and is never surfaced, so the
+    // click just looks ignored. Alexays/Waybar#5013 taught the module the
+    // Lua form, and waybar-git carries it -- installed here 2026-09-06,
+    // currently 0.15.0.r1004.g6d60c8e. Nothing in this file fixes it on an
+    // older waybar; see the README. Scroll below and SUPER+1..9 work either
+    // way, because those are config strings in the Lua form already.
     "format": "{id}",
     // Scroll the bar to move between workspaces, matching SUPER+scroll.
     // Hyprland 0.56 dispatchers are Lua: the old "dispatch workspace e+1"
     // string is a syntax error and fails silently from waybar.
     "on-scroll-up": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"e+1\" })'",
     "on-scroll-down": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"e-1\" })'"
+  },
+
+  // Screenshot, mirroring the PRINT binds so the two cannot drift: left is
+  // region-to-clipboard (PRINT), right is region-to-file (SUPER + PRINT),
+  // middle is whole-screen-to-clipboard (SHIFT + PRINT). Selecting a region is
+  // already a mouse job, so having to reach for a key to *start* one was the
+  // odd part.
+  //
+  // The file path goes through xdg-user-dir: the real directory on this box is
+  // ~/Kuvat, and hardcoding ~/Pictures silently creates a second, English one
+  // next to it.
+  "custom/screenshot": {
+    "format": "󰹑",
+    "tooltip-format": "Screenshot region (right: to file, middle: whole screen)",
+    "on-click": "grim -g \"$(slurp)\" - | wl-copy",
+    "on-click-right": "d=$(xdg-user-dir PICTURES 2>/dev/null || echo \"$HOME/Pictures\"); mkdir -p \"$d\" && grim -g \"$(slurp)\" \"$d/$(date +%Y%m%d-%H%M%S).png\"",
+    "on-click-middle": "grim - | wl-copy"
+  },
+
+  // Clipboard history, the same walker module SUPER + V opens. walker is named
+  // literally here rather than read from profile.lua -- this is JSON, it cannot
+  // see the Lua config -- so a launcher swap is a two-file change.
+  "custom/clipboard": {
+    "format": "󰅌",
+    "tooltip-format": "Clipboard history (SUPER + V)",
+    "on-click": "walker -m clipboard"
   },
 
   "hyprland/submap": {

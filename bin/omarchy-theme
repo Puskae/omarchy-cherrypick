@@ -7,8 +7,10 @@ Renders ~/.local/share/omarchy/default/themed/*.tpl against a palette from
 Usage:
   omarchy-theme            # list themes, mark current
   omarchy-theme <name>     # apply theme
+  omarchy-theme --next     # apply the next theme in that list (--prev to go back)
 """
 
+import json
 import os
 import re
 import shutil
@@ -41,6 +43,43 @@ SWAYNC_OUT    = f"{SWAYNC_DIR}/style.css"
 MAKO_DIR      = f"{HOME}/.config/mako"
 MAKO_TPL      = f"{MAKO_DIR}/config.tpl"
 MAKO_OUT      = f"{MAKO_DIR}/config"
+
+# VS Code themes itself from an extension, and the Arch build is code-oss, which
+# has its own dirs and pulls extensions from Open VSX rather than the Microsoft
+# marketplace. Sixteen themes name a marketplace extension in their vscode.json,
+# which is why that path is not taken: those publishers may not exist on Open
+# VSX at all, and honouring them would put a network install in the middle of a
+# theme switch. Every theme gets the generic palette render instead, dropped
+# into a local extension that only this script writes.
+VSCODE_VARIANTS = (
+    # extensions dir              user settings dir
+    (f"{HOME}/.vscode-oss/extensions", f"{HOME}/.config/Code - OSS/User"),
+    (f"{HOME}/.vscode/extensions",     f"{HOME}/.config/Code/User"),
+    (f"{HOME}/.vscode-oss/extensions", f"{HOME}/.config/VSCodium/User"),
+)
+VSCODE_EXT_NAME = "omarchy-theme"
+
+# VS Code reads a colour theme's JSON once, caches the parsed result with
+# "watch": false, and keys that cache on uiTheme + extension id + file path.
+# None of those change between palettes, which is what broke the obvious
+# design: two fixed labels over two fixed paths meant all 22 palettes shared
+# two cache keys, so each label was parsed at most once per VS Code session and
+# every apply after that silently kept whichever palette that slot had frozen
+# at. Applying nord could leave the editor showing catppuccin-latte -- correct
+# JSON on disk, stale colours on screen, no error anywhere.
+#
+# So every palette gets its own label and its own file. label -> theme id ->
+# file content is a fixed mapping, which makes a cached parse correct by
+# construction: there is nothing left to invalidate.
+#
+# The cost is that package.json contributes every theme, and VS Code only
+# rescans an extension manifest at startup. A *new* theme appearing under
+# ~/.local/share/omarchy/themes therefore needs one VS Code restart before it
+# can be selected; applying a theme that was already in the list never does.
+VSCODE_LEGACY_FILES = (
+    "themes/omarchy-color-theme.json",
+    "themes/omarchy-color-theme-2.json",
+)
 
 WALKER_DIR    = f"{HOME}/.config/walker"
 WALKER_THEME  = f"{WALKER_DIR}/themes/omarchy"
@@ -93,6 +132,11 @@ def read_palette(theme):
     colors.setdefault("bright_foreground", colors.get("foreground", "#ffffff"))
     for name in ("red", "green", "yellow", "blue", "magenta", "cyan"):
         colors.setdefault(f"bright_{name}", colors.get(name, "#ffffff"))
+
+    # vscode-theme.json.tpl asks for both of these; colors.toml carries the
+    # mode as "mode", and only some palettes define an orange at all.
+    colors.setdefault("theme_type", colors.get("mode", "dark"))
+    colors.setdefault("orange", colors.get("bright_red", colors.get("yellow", "#d08770")))
 
     # foot.ini.tpl asks for "purple"; the palettes only define "magenta".
     colors.setdefault("purple", colors.get("magenta", "#ffffff"))
@@ -436,6 +480,146 @@ def apply_terminals(theme, colors):
     return done
 
 
+def vscode_dirs():
+    """The extensions + settings dirs of whichever VS Code build is installed."""
+    if not (shutil.which("code") or shutil.which("code-oss") or shutil.which("codium")):
+        return None
+    for ext_dir, user_dir in VSCODE_VARIANTS:
+        if os.path.isdir(user_dir):
+            return ext_dir, user_dir
+    return None
+
+
+def vscode_label(theme):
+    """The name VS Code shows in its picker, and the value in settings.json."""
+    return f"Omarchy ({theme})"
+
+
+def vscode_rel(theme):
+    """This palette's theme file, relative to the extension directory."""
+    return f"themes/omarchy-{theme}-color-theme.json"
+
+
+def theme_mode(theme):
+    """light/dark for one theme, without parsing its whole palette.
+
+    Only uiTheme needs this, and it needs it for every installed theme on every
+    apply -- 22 files whose first line is the answer.
+    """
+    try:
+        with open(f"{THEMES}/{theme}/colors.toml") as fh:
+            for line in fh:
+                m = re.match(r'^\s*mode\s*=\s*"([^"]*)"\s*$', line)
+                if m:
+                    return m.group(1)
+    except OSError:
+        pass
+    return "dark"
+
+
+def vscode_select_theme(settings_path, label):
+    """Point workbench.colorTheme at this palette's label.
+
+    settings.json is the user's file and is jsonc -- comments and trailing
+    commas are legal there and json.load chokes on them. A file we cannot parse
+    is left completely alone and reported, because half-rewriting someone's
+    editor settings is worse than not theming the editor.
+
+    Re-applying the theme that is already selected writes the same value and so
+    does not make VS Code reload. That is right for a palette that has not
+    changed, and the one case it gets wrong -- hand-editing a colors.toml and
+    re-applying the same theme -- wants a window reload anyway.
+    """
+    existing = "{}"
+    if os.path.exists(settings_path):
+        with open(settings_path) as fh:
+            existing = fh.read()
+
+    try:
+        settings = json.loads(existing) if existing.strip() else {}
+    except json.JSONDecodeError:
+        return ("note: VS Code settings.json has comments or is malformed -- "
+                f'set "workbench.colorTheme": "{label}" in it by hand')
+
+    settings["workbench.colorTheme"] = label
+
+    os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+    with open(settings_path, "w") as fh:
+        json.dump(settings, fh, indent=4)
+        fh.write("\n")
+    return None
+
+
+def apply_vscode(theme, colors):
+    """Render the palette into a local extension VS Code loads as a theme."""
+    dirs = vscode_dirs()
+    if not dirs:
+        return None
+    ext_dir, user_dir = dirs
+
+    tpl = f"{TPL}/vscode-theme.json.tpl"
+    if not os.path.exists(tpl):
+        return "note: vscode-theme.json.tpl is missing -- VS Code left unthemed"
+
+    ext = f"{ext_dir}/{VSCODE_EXT_NAME}"
+
+    # Only the theme being applied is rendered. The others are contributed by
+    # package.json whether or not their file exists yet, and a file only has to
+    # be there when its label is selected -- which is what this line just did
+    # for the one label about to be written into settings.json.
+    write(f"{ext}/{vscode_rel(theme)}", render(tpl, colors))
+
+    # uiTheme decides which built-in defaults show through for anything the
+    # theme does not colour, so it follows each palette's own light/dark mode --
+    # five of the themes are light.
+    contributions = [
+        {
+            "label": vscode_label(name),
+            "uiTheme": "vs" if theme_mode(name) == "light" else "vs-dark",
+            "path": f"./{vscode_rel(name)}",
+        }
+        for name in theme_names()
+    ]
+
+    # A manifest VS Code has already scanned is only re-read at startup, so a
+    # changed theme list is worth saying out loud rather than leaving the user
+    # with a label their editor does not recognise.
+    pkg = f"{ext}/package.json"
+    was = []
+    try:
+        with open(pkg) as fh:
+            was = [t.get("label") for t in json.load(fh)["contributes"]["themes"]]
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+
+    write(pkg, json.dumps({
+        "name": VSCODE_EXT_NAME,
+        "displayName": "Omarchy Theme",
+        "description": "Generated by omarchy-theme from the current Omarchy palette.",
+        "version": "1.0.0",
+        "publisher": "local",
+        "engines": {"vscode": "^1.70.0"},
+        "categories": ["Themes"],
+        "contributes": {"themes": contributions},
+    }, indent=2) + "\n")
+
+    # The two shared files the old scheme rotated between. Left in place they
+    # are dead weight that no label points at any more.
+    for rel in VSCODE_LEGACY_FILES:
+        try:
+            os.remove(f"{ext}/{rel}")
+        except OSError:
+            pass
+
+    note = vscode_select_theme(f"{user_dir}/settings.json", vscode_label(theme))
+    if note:
+        return note
+    if was != [c["label"] for c in contributions]:
+        return ("note: VS Code's theme list changed -- restart VS Code once, "
+                "it only rescans extension manifests at startup")
+    return "vscode"
+
+
 def apply(theme):
     require_share()
     colors = read_palette(theme)
@@ -518,7 +702,8 @@ def apply(theme):
 
     # --- Apps beyond the core four, each skipped if not installed ---
     extras = []
-    for fn in (apply_btop, apply_neovim, apply_walker, apply_swaync, apply_mako):
+    for fn in (apply_btop, apply_neovim, apply_walker, apply_swaync, apply_mako,
+               apply_vscode):
         got = fn(theme, colors)
         if got:
             # apply_walker, apply_swaync and apply_mako return a note
@@ -566,31 +751,73 @@ def apply(theme):
         if "mako" in extras and reload_mako():
             print("  mako reloaded")
 
+        # Nothing to say about VS Code any more: it does not watch theme files,
+        # it watches settings.json, and every palette now has a label of its
+        # own -- so pointing the setting at that label recolours the editor in
+        # place. The only case that needs a restart is a theme the manifest has
+        # never listed, and apply_vscode returns a note for that instead.
         if "btop" in extras:
             print("  note: restart btop to pick up its new colors")
         if "neovim" in extras:
             print("  note: restart nvim; :Lazy sync if the colorscheme is new")
 
 
-def list_themes():
-    current = ""
+def theme_names():
+    require_share()
+    return sorted(t for t in os.listdir(THEMES) if os.path.isdir(f"{THEMES}/{t}"))
+
+
+def current_theme():
     if os.path.exists(CURRENT):
         with open(CURRENT) as fh:
-            current = fh.read().strip()
+            return fh.read().strip()
+    return ""
 
-    require_share()
 
+def cycle(step):
+    """Apply the next (or previous) theme in the same order `omarchy-theme` lists.
+
+    For flipping through the set from a keybind: wraps at both ends, and starts
+    from the first theme when the state file names something no longer there.
+    """
+    themes = theme_names()
+    if not themes:
+        sys.exit(f"No themes in {THEMES}")
+
+    try:
+        index = themes.index(current_theme())
+    except ValueError:
+        index = -1 if step > 0 else 0
+
+    theme = themes[(index + step) % len(themes)]
+    apply(theme)
+
+    # Cycling is a keybind, where stdout goes nowhere -- say which one landed.
+    if shutil.which("notify-send"):
+        subprocess.run(
+            ["notify-send", "-a", "omarchy-theme", "-t", "1500",
+             "-h", "string:x-canonical-private-synchronous:omarchy-theme",
+             f"Theme: {theme}", f"{themes.index(theme) + 1} of {len(themes)}"],
+            stderr=subprocess.DEVNULL)
+
+
+def list_themes():
+    current = current_theme()
     print("Omarchy themes:\n")
-    for theme in sorted(os.listdir(THEMES)):
-        if os.path.isdir(f"{THEMES}/{theme}"):
-            print(f"  {'*' if theme == current else ' '} {theme}")
+    for theme in theme_names():
+        print(f"  {'*' if theme == current else ' '} {theme}")
     print("\nApply with: omarchy-theme <name>")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
+    arg = sys.argv[1] if len(sys.argv) > 1 else None
+    if arg is None:
         list_themes()
-    elif sys.argv[1] in ("-h", "--help"):
+    elif arg in ("-h", "--help"):
         print(__doc__.strip())
+    elif arg in ("-n", "--next"):
+        cycle(1)
+    elif arg in ("-p", "--prev", "--previous"):
+        cycle(-1)
     else:
-        apply(sys.argv[1])
+        apply(arg)

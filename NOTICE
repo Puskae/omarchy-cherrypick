@@ -15,10 +15,10 @@ The permission notice in LICENSE is the MIT notice retained for those portions.
 
 Derived files, each carrying a comment naming its upstream source:
 
-  hypr/omarchy-bindings.lua   <- default/hypr/bindings/*.lua
-  hypr/omarchy-looknfeel.lua  <- default/hypr/looknfeel.lua
-  hypr/omarchy-windows.lua    <- default/hypr/windows.lua, default/hypr/apps/*.lua
-  hypr/omarchy-qconsole.lua   <- default/hypr/qconsole.lua
+  hypr/modules/bindings.lua   <- default/hypr/bindings/*.lua
+  hypr/modules/looknfeel.lua  <- default/hypr/looknfeel.lua
+  hypr/modules/windows.lua    <- default/hypr/windows.lua, default/hypr/apps/*.lua
+  hypr/modules/qconsole.lua   <- default/hypr/qconsole.lua
 
 These are translations from Omarchy's own o.bind() / o.window() helpers to the
 stock Hyprland Lua API, and some of Omarchy's comments are kept verbatim.
@@ -27,10 +27,11 @@ Omarchy's themes and templates are NOT redistributed here. The README's install
 steps fetch them from Omarchy directly.
 
 Everything else is original to this repository: bin/*, config/waybar/*,
-config/walker/*, config/gamemode.ini, config/MangoHud.conf, hypr/hypridle.conf
-and hypr/hyprlock.conf. The waybar configuration is an interpretation of
-Omarchy's look, not a copy of an upstream file -- Omarchy 4.0 ships herdr rather
-than waybar, and has no walker theme at all.
+config/walker/*, config/gamemode.ini, config/MangoHud.conf, hypr/profile.lua,
+hypr/modules/autostart.lua, hypr/hypridle.conf and hypr/hyprlock.conf. The
+waybar configuration is an interpretation of Omarchy's look, not a copy of an
+upstream file -- Omarchy 4.0 ships herdr rather than waybar, and has no walker
+theme at all.
 
 
 =======================================================================
