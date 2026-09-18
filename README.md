@@ -521,30 +521,37 @@ The bind simply does nothing.
 Use keysyms for your layout instead. Expect to lose an hour to this if you don't
 know it, because a silently-dead bind looks like a broken keyboard, not a config bug.
 
-### 3. Not using uwsm breaks every systemd user unit
+### 3. Not using uwsm breaks every systemd user unit — unless you start them explicitly
 
 The session runs plain `start-hyprland`, **not** uwsm. Consequence: nothing ever
-activates `graphical-session.target`, so **every user unit that is `WantedBy=` it
-never starts.** hyprpaper even `Requires=` it.
+activates `graphical-session.target`, so **any unit that only relies on
+`WantedBy=` it never starts.** hyprpaper even `Requires=` it.
 
-That's why `modules/autostart.lua` launches daemons **directly**:
+`modules/autostart.lua` works around that by calling `systemctl --user start` on
+each of these units **explicitly**, every time Hyprland starts, rather than
+enabling them and hoping something activates the target:
 
 ```lua
 hl.on("hyprland.start", function()
   hl.exec_cmd("systemctl --user import-environment $(env | cut -d'=' -f 1)")
   hl.exec_cmd("dbus-update-activation-environment --systemd --all")
-  hl.exec_cmd("/usr/lib/hyprpolkitagent/hyprpolkitagent")
-  hl.exec_cmd("hyprpaper")
-  hl.exec_cmd("swaync")
-  hl.exec_cmd("waybar")
-  hl.exec_cmd("hypridle")
+  hl.exec_cmd("systemctl --user start hyprpolkitagent.service")
+  hl.exec_cmd("systemctl --user start hyprpaper.service")
+  hl.exec_cmd("systemctl --user start swaync.service")
+  hl.exec_cmd("systemctl --user start waybar.service")
+  hl.exec_cmd("systemctl --user start hypridle.service")
   ...
 end)
 ```
 
-Don't "fix" this by converting them to `systemctl --user start` unless you move the
-session to uwsm. The symptom of getting it wrong is subtle: things work, but only
-sometimes, depending on what else happened to activate the target.
+An explicit `start` doesn't care whether `graphical-session.target` ever
+activates on its own — it works the same in a plain `start-hyprland` session and
+under uwsm, and you get real supervision (auto-restart on crash, `journalctl
+--user -u <name>` for logs) that a raw `hl.exec_cmd("hyprpaper")` never gave you.
+The thing to *not* do is `systemctl --user enable` these and assume that alone
+is enough: enabling only wires up the `WantedBy=` symlink, and without
+something activating the target, an enabled-but-never-started unit just sits
+there. `start` sidesteps the whole question.
 
 ### 4. Walker's launcher failure looks like a dead keyboard
 

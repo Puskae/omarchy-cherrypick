@@ -12,30 +12,37 @@ hl.on("hyprland.start", function()
   hl.exec_cmd("systemctl --user import-environment $(env | cut -d'=' -f 1)")
   hl.exec_cmd("dbus-update-activation-environment --systemd --all")
 
-  -- Launched directly, not via their systemd units: every one of those is
-  -- WantedBy=graphical-session.target (hyprpaper even Requires= it), and
-  -- nothing activates that target in a plain, non-uwsm Hyprland session.
-  -- Don't "fix" this by switching to systemctl --user start unless the session
-  -- moves to uwsm; the units will simply never run.
-  hl.exec_cmd("/usr/lib/hyprpolkitagent/hyprpolkitagent")  -- GUI auth prompts
-  hl.exec_cmd("hyprpaper")  -- wallpaper
+  -- hyprpaper, hyprpolkitagent, swaync, waybar and hypridle each ship a
+  -- systemd user unit (WantedBy=graphical-session.target; hyprpaper even
+  -- Requires= it), so start those units explicitly here rather than
+  -- exec'ing the binaries. This is a plain `systemctl --user start`, not
+  -- `enable` -- it doesn't depend on anything else activating
+  -- graphical-session.target first, which matters because whether that
+  -- target auto-activates depends entirely on how Hyprland was launched:
+  -- **uwsm** activates it itself; a plain `start-hyprland` session with no
+  -- session manager never does, and every `WantedBy=` unit would otherwise
+  -- just sit there. Calling `start` explicitly on every `hyprland.start`
+  -- works either way, gets real supervision (auto-restart on crash,
+  -- `journalctl --user -u <name>` for logs) for free, and means this file
+  -- doesn't need to know which kind of session it's running under.
+  --
+  -- swaync rather than mako for the control centre: a panel that lists what
+  -- you missed and keeps each notification's action buttons live. If mako is
+  -- also installed, mask its unit (`systemctl --user mask mako.service`) --
+  -- both ship a D-Bus activation file claiming org.freedesktop.Notifications,
+  -- and without the mask systemd tries to activate mako too the first time
+  -- something posts a notification, while swaync already owns the name.
+  hl.exec_cmd("systemctl --user start hyprpolkitagent.service")  -- GUI auth prompts
+  hl.exec_cmd("systemctl --user start hyprpaper.service")        -- wallpaper
+  hl.exec_cmd("systemctl --user start swaync.service")           -- notifications
+  hl.exec_cmd("systemctl --user start waybar.service")           -- status bar
+  hl.exec_cmd("systemctl --user start hypridle.service")         -- idle -> lock
 
-  -- Notification daemon. swaync rather than mako for the control centre: a
-  -- panel that lists what you missed and keeps each notification's action
-  -- buttons live. mako is still installed as a fallback with a themed config,
-  -- but its unit is masked -- both ship a D-Bus activation file claiming
-  -- org.freedesktop.Notifications, and without the mask systemd tries to
-  -- activate mako while swaync already owns the name. Swapping back therefore
-  -- needs `systemctl --user unmask mako.service` as well as this line.
-  hl.exec_cmd("swaync")     -- notifications
-  hl.exec_cmd("waybar")     -- status bar
-  hl.exec_cmd("hypridle")   -- idle -> lock
-
-  -- Walker's backend. Nothing else starts it: the elephant package ships no
-  -- systemd unit, and Omarchy enables one it writes itself during an install
-  -- that never ran here. Without elephant, walker maps its overlay and sits on
-  -- "waiting for elephant" forever while holding keyboard focus -- which
-  -- presents as the keyboard having died, not as a launcher bug.
+  -- Walker's backend is launched directly, not via a unit: elephant ships no
+  -- systemd unit of its own, and Omarchy enables one it writes itself during
+  -- an install that never ran here. Without elephant, walker maps its overlay
+  -- and sits on "waiting for elephant" forever while holding keyboard focus
+  -- -- which presents as the keyboard having died, not as a launcher bug.
   hl.exec_cmd("elephant")
   hl.exec_cmd("walker --gapplication-service")  -- launcher daemon
 
