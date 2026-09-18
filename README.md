@@ -265,8 +265,14 @@ sudo pacman -S --needed \
   xdg-desktop-portal-hyprland qt6-wayland \
   waybar swaync alacritty ttf-meslo-nerd \
   grim slurp wl-clipboard playerctl pavucontrol \
-  wlogout wf-recorder libnotify xdg-user-dirs
+  wf-recorder libnotify xdg-user-dirs
 ```
+
+If `waybar-git` is already installed (see
+[Clicking a workspace on the bar needs a recent waybar](#clicking-a-workspace-on-the-bar-needs-a-recent-waybar)),
+drop `waybar` from this line — `--needed` does not count a `-git` package as the
+real one, and the conflict prompt's default answer aborts the whole install.
+`install.sh` checks for this itself.
 
 `libnotify` and `xdg-user-dirs` are usually already pulled in by Plasma; they're
 listed because `bin/` uses `notify-send` and `xdg-user-dir` directly. `swaync` is
@@ -288,11 +294,15 @@ From the AUR — **the launcher and every one of its providers**:
 
 ```sh
 paru -S --needed \
+  wlogout \
   walker-bin elephant-bin \
   elephant-desktopapplications-bin elephant-runner-bin elephant-files-bin \
   elephant-menus-bin elephant-calc-bin elephant-clipboard-bin \
   elephant-symbols-bin elephant-websearch-bin elephant-providerlist-bin
 ```
+
+`wlogout` is AUR-only on plain Arch; CachyOS's repo carries it, which is why it
+used to sit in the pacman list above.
 
 **Don't trim the elephant list.** Each provider is a separate package dropping a
 `.so` into `/etc/xdg/elephant/providers/`, and walker has no built-in fallback:

@@ -63,14 +63,19 @@ PKGS_CORE=(
   waybar swaync alacritty ttf-meslo-nerd
   python
   grim slurp wl-clipboard playerctl pavucontrol
-  wlogout wf-recorder libnotify xdg-user-dirs
+  wf-recorder libnotify xdg-user-dirs
 )
 
 # Every elephant provider is a separate package dropping a .so into
 # /etc/xdg/elephant/providers/, and walker has no built-in fallback: the
 # daemon without providers is a launcher that opens and finds nothing.
 # Don't trim this list.
+#
+# wlogout is here rather than in PKGS_CORE because it is AUR-only on plain
+# Arch (CachyOS's own repo happens to carry it). In the pacman list it is a
+# `target not found` that aborts the whole line, not just itself.
 PKGS_AUR=(
+  wlogout
   walker-bin elephant-bin
   elephant-desktopapplications-bin elephant-runner-bin elephant-files-bin
   elephant-menus-bin elephant-calc-bin elephant-clipboard-bin
@@ -191,6 +196,18 @@ install_file() {
   fi
 }
 
+# --needed only skips a package installed under its own name. waybar-git (the
+# README's fix for workspace clicks) provides waybar, and asking pacman for
+# waybar on top of it is a conflict prompt whose default answer aborts the
+# whole transaction. pacman -T resolves provides, so anything already
+# satisfied -- by name or by a -git/-bin variant -- is dropped here.
+not_satisfied() {
+  local p
+  for p; do
+    pacman -T "$p" >/dev/null || printf '%s\n' "$p"
+  done
+}
+
 # --- arguments -------------------------------------------------------------
 
 while (( $# )); do
@@ -254,12 +271,22 @@ fi
 
 if (( DO_PACKAGES )); then
   step "Packages"
-  run sudo pacman -S --needed "${PKGS_CORE[@]}"
-  record packages "pacman" "${PKGS_CORE[*]}"
+  mapfile -t todo < <(not_satisfied "${PKGS_CORE[@]}")
+  if (( ${#todo[@]} )); then
+    run sudo pacman -S --needed "${todo[@]}"
+    record packages "pacman" "${todo[*]}"
+  else
+    info "core packages already satisfied."
+  fi
 
   if confirm "also install the optional set (${PKGS_OPTIONAL[*]})?"; then
-    run sudo pacman -S --needed "${PKGS_OPTIONAL[@]}"
-    record packages "pacman-optional" "${PKGS_OPTIONAL[*]}"
+    mapfile -t todo < <(not_satisfied "${PKGS_OPTIONAL[@]}")
+    if (( ${#todo[@]} )); then
+      run sudo pacman -S --needed "${todo[@]}"
+      record packages "pacman-optional" "${todo[*]}"
+    else
+      info "optional packages already satisfied."
+    fi
   else
     info "skipped -- each one backs a feature that hides itself when absent."
   fi
