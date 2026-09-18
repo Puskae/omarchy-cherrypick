@@ -28,6 +28,9 @@ HYPR_OUT = f"{HOME}/.config/hypr/theme.lua"
 WAYBAR_OUT = f"{HOME}/.config/waybar/colors.css"
 HYPRPAPER_OUT = f"{HOME}/.config/hypr/hyprpaper.conf"
 
+GTK3_SETTINGS = f"{HOME}/.config/gtk-3.0/settings.ini"
+GTK4_SETTINGS = f"{HOME}/.config/gtk-4.0/settings.ini"
+
 BTOP_DIR      = f"{HOME}/.config/btop"
 BTOP_OUT      = f"{BTOP_DIR}/themes/omarchy.theme"
 BTOP_CONF     = f"{BTOP_DIR}/btop.conf"
@@ -464,6 +467,64 @@ def restart_walker():
     return True
 
 
+def _set_gtk_setting(path, key, value):
+    """Rewrite one key=value line in a GTK settings.ini, in place.
+
+    Same idiom as apply_btop's color_theme line: settings.ini is the user's
+    file -- GTK itself writes font/cursor/toolbar prefs into it -- so only the
+    keys this script owns get touched.
+    """
+    if os.path.exists(path):
+        with open(path) as fh:
+            conf = fh.read()
+    else:
+        conf = "[Settings]\n"
+
+    line = f"{key}={value}"
+    pattern = rf"^\s*{re.escape(key)}\s*=.*$"
+    if re.search(pattern, conf, re.M):
+        conf = re.sub(pattern, line, conf, count=1, flags=re.M)
+    else:
+        conf = conf.rstrip("\n") + "\n" + line + "\n"
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as fh:
+        fh.write(conf)
+
+
+def apply_gtk(theme, colors):
+    """Point Thunar (and any other GTK3/4 app) at the theme's icon set and
+    light/dark mode.
+
+    Gated on thunar rather than a config directory existing: GTK doesn't
+    create ~/.config/gtk-3.0 until something reads it, the same reason
+    apply_btop gates on the binary instead of ~/.config/btop.
+
+    Every Omarchy theme names a matching Yaru icon variant in icons.theme, but
+    Yaru is AUR-only and isn't installed here -- pointing GTK at an icon theme
+    that doesn't exist on disk renders every icon as a blank box, so this
+    falls back to Adwaita (always present) when the named variant is missing.
+    """
+    if not shutil.which("thunar"):
+        return None
+
+    icon_theme = "Adwaita"
+    icons_file = f"{THEMES}/{theme}/icons.theme"
+    if os.path.exists(icons_file):
+        with open(icons_file) as fh:
+            wanted = fh.read().strip()
+        if wanted and os.path.isdir(f"/usr/share/icons/{wanted}"):
+            icon_theme = wanted
+
+    dark = "1" if colors.get("theme_type", "dark") == "dark" else "0"
+
+    for settings_path in (GTK3_SETTINGS, GTK4_SETTINGS):
+        _set_gtk_setting(settings_path, "gtk-icon-theme-name", icon_theme)
+        _set_gtk_setting(settings_path, "gtk-application-prefer-dark-theme", dark)
+
+    return "gtk (thunar)"
+
+
 def apply_terminals(theme, colors):
     """kitty and foot, for whoever uses them alongside Alacritty."""
     done = []
@@ -703,7 +764,7 @@ def apply(theme):
     # --- Apps beyond the core four, each skipped if not installed ---
     extras = []
     for fn in (apply_btop, apply_neovim, apply_walker, apply_swaync, apply_mako,
-               apply_vscode):
+               apply_vscode, apply_gtk):
         got = fn(theme, colors)
         if got:
             # apply_walker, apply_swaync and apply_mako return a note
