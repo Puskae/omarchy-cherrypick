@@ -59,7 +59,7 @@ DO_THEMES=1
 # the two can be diffed by eye when either changes.
 PKGS_CORE=(
   hyprland hyprpaper hypridle hyprlock hyprpicker hyprpolkitagent
-  xdg-desktop-portal-hyprland qt6-wayland
+  xdg-desktop-portal-hyprland qt5-wayland qt6-wayland
   waybar swaync alacritty ttf-meslo-nerd
   python
   grim slurp wl-clipboard playerctl pavucontrol
@@ -277,6 +277,19 @@ if (( DO_PACKAGES )); then
     record packages "pacman" "${todo[*]}"
   else
     info "core packages already satisfied."
+  fi
+
+  # lib32-gamemode (32-bit Proton/Steam games) lives in multilib, which this
+  # script does not enable. Added here rather than in PKGS_OPTIONAL itself: a
+  # package name pacman can't resolve at all aborts the *whole* transaction,
+  # not just itself -- silently taking every other optional package down with
+  # it if multilib happens to be off. Only offered when it's already on.
+  if pacman-conf --repo=multilib >/dev/null 2>&1; then
+    PKGS_OPTIONAL+=(lib32-gamemode)
+  else
+    warn "multilib isn't enabled -- skipping lib32-gamemode (32-bit Proton/Steam
+       games won't get gamemode optimisations). Enable [multilib] in
+       /etc/pacman.conf, pacman -Syu, then: sudo pacman -S lib32-gamemode"
   fi
 
   if confirm "also install the optional set (${PKGS_OPTIONAL[*]})?"; then
